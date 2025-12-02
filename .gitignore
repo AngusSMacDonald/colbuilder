@@ -111,3 +111,8 @@ glucosepane/
 logs/
 homosapiens*
 homo_sapiens*/
+
+# misc
+Collagen*/
+Collagen*.fasta
+config_*.yaml
