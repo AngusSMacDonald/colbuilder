@@ -332,12 +332,17 @@ class System:
                     f.write(crystal_header)
                 
                 for model_id, model in self.system.items():
+                    model_type = getattr(model, 'type', None)
                     if hasattr(model, 'pdb_file') and Path(model.pdb_file).exists():
                         LOG.debug(f"Writing model {model_id}")
-                        self._write_model_file_content(f, model.pdb_file)
+                        self._write_model_file_content(
+                            f,
+                            model.pdb_file,
+                            segment_name=model_type,
+                        )
                         written_models += 1
-                        model_type = getattr(model, 'type', 'unknown')
-                        written_by_type[model_type] = written_by_type.get(model_type, 0) + 1
+                        model_type_key = model_type or 'unknown'
+                        written_by_type[model_type_key] = written_by_type.get(model_type_key, 0) + 1
                 
                 if has_connections:
                     for model_id, model in self.system.items():
@@ -358,7 +363,11 @@ class System:
                                 LOG.warning(f"No caps file found for model {model_id} type {model_type} connect {connect_id}")
                                 continue
                             
-                            self._write_caps_file_content(f, caps_file)
+                            self._write_caps_file_content(
+                                f,
+                                caps_file,
+                                segment_name=model_type,
+                            )
                             written_connections += 1
                             written_by_type[model_type] = written_by_type.get(model_type, 0) + 1
                             written_caps_files.add(key)
@@ -381,12 +390,32 @@ class System:
                             caps_file = caps_by_model.get(key)
                             if caps_file:
                                 LOG.debug(f"Writing caps file {caps_file} for type {model_type}")
-                                self._write_caps_file_content(f, caps_file)
+                                self._write_caps_file_content(
+                                    f,
+                                    caps_file,
+                                    segment_name=model_type,
+                                )
                                 written_connections += 1
                                 written_by_type[model_type] = written_by_type.get(model_type, 0) + 1
                                 written_caps_files.add(key)
                 
                 f.write("END\n")
+
+            # Post-write balance check: compare how many models/caps were written per type
+            if written_by_type:
+                total_written = sum(written_by_type.values())
+                if total_written > 0:
+                    ratios = {
+                        k: (v / total_written) * 100 for k, v in written_by_type.items()
+                    }
+                    max_type = max(ratios, key=ratios.get)
+                    min_type = min(ratios, key=ratios.get)
+                    LOG.info(f"Type write ratios (%): {ratios}")
+                    if ratios[max_type] > ratios[min_type] * 1.1:
+                        LOG.warning(
+                            f"Type imbalance detected after write: {max_type} {ratios[max_type]:.1f}% vs "
+                            f"{min_type} {ratios[min_type]:.1f}%"
+                        )
             
             self._verify_output_file(pdb_out_path)
             
@@ -396,42 +425,85 @@ class System:
             LOG.debug(f"Traceback: {traceback.format_exc()}")
             raise
 
-    def _write_caps_file_content(self, file_handle, caps_file):
-        """Helper method to write caps file content to an open file handle"""
+    def _apply_segment_tag(self, line: str, segment_name: Optional[str]) -> str:
+        """
+        Insert a segment/tag identifier into a PDB record.
+        
+        The PDB segment identifier lives in columns 73-76; we right-align the provided
+        tag (trimmed to 4 characters) into that field and make sure the record is
+        padded to 80 characters before the newline.
+        """
+        if not segment_name:
+            return line
+
+        segment_tag = str(segment_name).strip()
+        if not segment_tag:
+            return line
+
+        segment_tag = segment_tag[:4]
+
+        # Ensure we have enough width to inject the segment tag
+        clean_line = line.rstrip("\n")
+        if len(clean_line) < 80:
+            clean_line = clean_line.ljust(80)
+        else:
+            clean_line = clean_line[:80]
+
+        return clean_line[:72] + f"{segment_tag:>4}" + clean_line[76:]
+
+    def _prepare_pdb_line(self, line: str, segment_name: Optional[str]) -> Optional[str]:
+        """
+        Normalize a PDB line, converting HETATM to ATOM and injecting segment tags.
+
+        Returns a formatted line (including trailing newline) or None if the line
+        should be skipped.
+        """
+        if line.startswith(("END", "ENDMDL")):
+            return None
+
+        if not (line.startswith(self.is_line) or line.startswith("TER")):
+            return None
+
+        if line.startswith('HETATM'):
+            line = 'ATOM  ' + line[6:]
+
+        base_line = line.rstrip("\n")
+        if segment_name and line.startswith(self.is_line):
+            base_line = self._apply_segment_tag(base_line, segment_name)
+
+        if len(base_line) > 80:
+            base_line = base_line[:80]
+
+        return base_line + "\n"
+
+    def _write_caps_file_content(self, file_handle, caps_file, segment_name: Optional[str] = None):
+        """Helper method to write caps file content to an open file handle with segment tags"""
         try:
             with open(caps_file, 'r') as caps_file_obj:
                 content_written = False
                 for line in caps_file_obj:
-                    if line.startswith(self.is_line) or line.startswith("TER"):
-                        content_written = True
-                        if line.startswith('HETATM'):
-                            line = 'ATOM  ' + line[6:]
-                        if len(line.rstrip()) > 0:
-                            if len(line) > 81:
-                                line = line[:80] + '\n'
-                            file_handle.write(line)
-                    elif line.startswith(("END", "ENDMDL")):
+                    if line.startswith(("END", "ENDMDL")):
                         break
+                    prepared_line = self._prepare_pdb_line(line, segment_name)
+                    if prepared_line:
+                        file_handle.write(prepared_line)
+                        content_written = True
                 
                 if not content_written:
                     LOG.warning(f"No atom records found in caps file: {caps_file}")
         except Exception as e:
             LOG.error(f"Error reading caps file {caps_file}: {str(e)}")
 
-    def _write_model_file_content(self, file_handle, model_file):
-        """Helper method to write model file content to an open file handle"""
+    def _write_model_file_content(self, file_handle, model_file, segment_name: Optional[str] = None):
+        """Helper method to write model file content to an open file handle with segment tags"""
         try:
             with open(model_file, 'r') as model_file_obj:
                 for line in model_file_obj:
-                    if line.startswith(self.is_line) or line.startswith("TER"):
-                        if line.startswith('HETATM'):
-                            line = 'ATOM  ' + line[6:]
-                        if len(line.rstrip()) > 0:
-                            if len(line) > 81:
-                                line = line[:80] + '\n'
-                            file_handle.write(line)
-                    elif line.startswith(("END", "ENDMDL")):
+                    if line.startswith(("END", "ENDMDL")):
                         break
+                    prepared_line = self._prepare_pdb_line(line, segment_name)
+                    if prepared_line:
+                        file_handle.write(prepared_line)
         except Exception as e:
             LOG.error(f"Error reading model file {model_file}: {str(e)}")
 

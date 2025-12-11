@@ -116,3 +116,4 @@ homo_sapiens*/
 Collagen*/
 Collagen*.fasta
 config_*.yaml
+*.pdb
