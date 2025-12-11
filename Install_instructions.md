@@ -42,7 +42,7 @@ conda activate colbuilder
 
 git clone https://github.com/AngusSMacDonald/colbuilder.git
 cd colbuilder
-pip install .
+pip install -e .
 ```
 
 # Install dependencies
@@ -67,5 +67,5 @@ repository was cloned (i.e. the `colbuilder` directory).
 Find a sample test configuration from the ColBuilder GitHub instructions,
 save it as `test.yaml`, and run:
 
-colbuilder --config_file test.yaml
+`colbuilder --config_file test.yaml`
 
