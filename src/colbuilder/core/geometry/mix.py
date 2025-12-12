@@ -185,15 +185,6 @@ class Mix:
             else:
                 LOG.warning(f"Model {model_id} was not assigned a type")
         
-        # Log the final type distribution
-        actual_distribution = {}
-        for model_id in model_ids:
-            model = self.system.get_model(model_id=model_id)
-            if hasattr(model, 'type'):
-                actual_distribution[model.type] = actual_distribution.get(model.type, 0) + 1
-        
-        LOG.info(f"     Final type distribution: {actual_distribution}")
-        
         return self.system
 
     def get_mix(self, ratio_mix: Optional[List[int]] = None) -> str:

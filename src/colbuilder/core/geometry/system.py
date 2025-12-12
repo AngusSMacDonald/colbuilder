@@ -408,14 +408,12 @@ class System:
                     ratios = {
                         k: (v / total_written) * 100 for k, v in written_by_type.items()
                     }
-                    max_type = max(ratios, key=ratios.get)
-                    min_type = min(ratios, key=ratios.get)
-                    LOG.info(f"Type write ratios (%): {ratios}")
-                    if ratios[max_type] > ratios[min_type] * 1.1:
-                        LOG.warning(
-                            f"Type imbalance detected after write: {max_type} {ratios[max_type]:.1f}% vs "
-                            f"{min_type} {ratios[min_type]:.1f}%"
-                        )
+                    summary_written = ", ".join(
+                        f"{k}: {ratios[k]:.1f}% ({written_by_type[k]} records)"
+                        for k in sorted(written_by_type.keys())
+                    )
+                    LOG.info(f"Type write ratios: {summary_written} (total {total_written} records)")
+                    LOG.debug(f"Type write counts raw: {written_by_type}")
             
             self._verify_output_file(pdb_out_path)
             

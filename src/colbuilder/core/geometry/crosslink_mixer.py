@@ -232,23 +232,6 @@ class CrosslinkMixer:
                 except Exception as e:
                     LOG.error(f"Error processing caps for model {idx}: {str(e)}")
 
-            # Fallback: ensure a .caps.pdb exists for every model, even if capping failed
-            for idx in model_ids:
-                pdb_id = int(float(idx))
-                source = caps_dir / f"{pdb_id}.pdb"
-                target = caps_dir / f"{pdb_id}.caps.pdb"
-                if target.exists():
-                    continue
-                if source.exists():
-                    try:
-                        shutil.copy2(source, target)
-                        LOG.warning(
-                            f"Missing caps for model {pdb_id} in {crosslink_type}; "
-                            "copied uncapped PDB as fallback."
-                        )
-                    except Exception as e:
-                        LOG.error(f"Failed to create fallback caps for model {pdb_id}: {e}")
-
             return caps
 
         except Exception as e:

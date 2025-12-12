@@ -117,3 +117,4 @@ Collagen*/
 Collagen*.fasta
 config_*.yaml
 *.pdb
+yaml_fasta/

@@ -1,10 +1,10 @@
-# Install UCSF Chimera (NOT ChimeraX) and add to PATH
+# Install UCSF Chimera
 
 Install UCSF Chimera (classic, NOT ChimeraX). Make sure the executable is executable and added to your `$PATH` (e.g. via `chmod +x chimera...`, `./chimera...`).
-- add the following to the end of `~/.bashrc`: `export PATH="/home/user/Colbuilder/chimera/bin:$PATH"`
+Add the following to the end of `~/.bashrc`: `export PATH="/home/user/Colbuilder/chimera/bin:$PATH"`
 
 
-# Install Modeller 10.5
+# Install Modeller
 
 Download Modeller 10.5:
 
@@ -26,8 +26,7 @@ During installation:
 - Choose option #2 for x86_64
 - Note the install path (e.g. /home/user/bin/modeller10.5/)
 
-Append the following lines to the end of `~/.bashrc`
-(adjust paths as needed):
+Append the following lines to the end of `~/.bashrc` (adjust paths and user):
 ```
 export PYTHONPATH="/home/user/bin/modeller10.5/lib/x86_64-intel8/python3.3:$PYTHONPATH"
 export PYTHONPATH="/home/user/bin/modeller10.5/modlib:$PYTHONPATH"
@@ -36,9 +35,10 @@ export PATH="$HOME/.local/bin:$PATH"
 ```
 
 # Create conda environment and install ColBuilder
+*In this case an editable environment for development. If you want a fixed local install, do `pip install .` instead, and change environment name to reflect.*
 ```
-conda create -n colbuilder python=3.9
-conda activate colbuilder
+conda create -n colbuilder-dev python=3.9
+conda activate colbuilder-dev
 
 git clone https://github.com/AngusSMacDonald/colbuilder.git
 cd colbuilder
@@ -55,12 +55,10 @@ conda install bioconda::muscle
 
 `colbuilder --help`
 
-
 # Running ColBuilder
 
 To run colbuilder commands, you must currently be in the directory where the
-repository was cloned (i.e. the `colbuilder` directory).
-
+repository was cloned (i.e. the `colbuilder` directory) as this is an editable (live) install. You could instead do a permanent install (`pip install .`) at the start, and add this to PATH.
 
 # Test run
 
