@@ -116,5 +116,9 @@ homo_sapiens*/
 Collagen*/
 Collagen*.fasta
 config_*.yaml
+Col*.yaml
+test*.yaml
 *.pdb
 yaml_fasta/
+test/
+runs/
