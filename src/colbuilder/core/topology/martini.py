@@ -718,6 +718,30 @@ async def build_martini3(
         model_status = {}
         failed_martinize, failed_contact, failed_go, failed_itp = [], [], [], []
         processed_in_topology: set = set()
+        processed_groups: Dict[Tuple[str, Tuple[int, ...]], float] = {}
+
+        def _normalize_connect_ids(raw_connect: Optional[List[Any]], fallback_model_id: Any) -> List[int]:
+            """
+            Normalize connection IDs to deterministic integer IDs.
+            Falls back to self-connection when no valid IDs are present.
+            """
+            normalized: List[int] = []
+
+            if raw_connect:
+                for cid in raw_connect:
+                    try:
+                        normalized.append(int(float(cid)))
+                    except (TypeError, ValueError):
+                        LOG.warning(f"Skipping invalid connection id '{cid}' for model {fallback_model_id}")
+
+            if normalized:
+                return sorted(set(normalized))
+
+            try:
+                return [int(float(fallback_model_id))]
+            except (TypeError, ValueError):
+                LOG.warning(f"Could not derive self-connection for model {fallback_model_id}")
+                return []
 
         for model_id in tqdm(models_list, desc="Building topology", unit="%"):
             model = system.get_model(model_id=model_id)
@@ -726,19 +750,26 @@ async def build_martini3(
                 model_status[model_id] = "no_model"
                 continue
 
-            # === NEW: build connect_ids fallback ===
+            # Build connect_ids with deterministic normalization and self fallback.
             sys_connect = getattr(model, "connect", None)
-            if sys_connect:
-                connect_ids = list(sys_connect)
-            else:
-                connect_ids = [model_id]  # self-connection
-                LOG.debug(f"Model {model_id}: no connections in System; processing as self-connection")
+            connect_ids = _normalize_connect_ids(sys_connect, model_id)
 
-            # (Optional guard: skip if we truly have nothing—unlikely now)
             if not connect_ids:
                 LOG.warning(f"Skipping model {model_id}: no connections and no fallback")
                 model_status[model_id] = "no_connections"
                 continue
+
+            # Deduplicate components that would generate the same coarse-grained structures.
+            model_type = str(getattr(model, "type", ""))
+            group_key = (model_type, tuple(connect_ids))
+            if group_key in processed_groups:
+                representative = processed_groups[group_key]
+                model_status[model_id] = f"duplicate_group_of_{representative}"
+                LOG.debug(
+                    f"Skipping model {model_id}: duplicate group {group_key} already processed via model {representative}"
+                )
+                continue
+            processed_groups[group_key] = model_id
 
             try:
                 for connect_id in connect_ids:
