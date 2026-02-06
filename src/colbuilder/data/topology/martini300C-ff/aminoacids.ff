@@ -13,8 +13,8 @@
 ; limitations under the License.
 
 [ macros ]
-protein_resnames "GLY|ALA|CYS|VAL|LEU|ILE|MET|PRO|HYP|ASN|GLN|ASP|ASPP|ASH|GLU|GLUP|GLH|THR|SER|LYS|LSN|LYN|ARG|HIS|HSD|HSP|HID|HIP|HIE|PHE|TYR|TRP|NME|ACE|CLA|HYP|L4Y|L5Y|LY2|LY3|LYX"
-protein_resnames_non_pro "GLY|ALA|CYS|VAL|LEU|ILE|MET|ASN|GLN|ASP|ASPP|ASH|GLU|GLUP|GLH|THR|SER|LYS|LSN|LYN|ARG|HIS|HSD|HSP|HID|HIP|HIE|PHE|TYR|TRP|NME|ACE|CLA|HYP|L4Y|L5Y|LY2|LY3|LYX"
+protein_resnames "GLY|ALA|CYS|VAL|LEU|ILE|MET|PRO|HYP|ASN|GLN|ASP|ASPP|ASH|GLU|GLUP|GLH|THR|SER|LYS|LSN|LYN|ARG|HIS|HSD|HSP|HID|HIP|HIE|PHE|TYR|TRP|NME|ACE|CLA|HYP|L4Y|L5Y|L4X|L5X|LY2|LY3|LYX|LX2|LX3|LXX"
+protein_resnames_non_pro "GLY|ALA|CYS|VAL|LEU|ILE|MET|ASN|GLN|ASP|ASPP|ASH|GLU|GLUP|GLH|THR|SER|LYS|LSN|LYN|ARG|HIS|HSD|HSP|HID|HIP|HIE|PHE|TYR|TRP|NME|ACE|CLA|HYP|L4Y|L5Y|L4X|L5X|LY2|LY3|LYX|LX2|LX3|LXX"
 prot_default_bb_type P2
 stiff_fc 1000000
 
@@ -192,6 +192,114 @@ LYX                1
  SC2   SC3  SC4       2   140   150  
  SC2   SC3  SC5       2   100   200
  
+;;;; DIVALENT - CROSSLINK - PART L4X
+
+[ moleculetype ]
+; molname       nrexcl
+L4X                1
+
+[ atoms ]
+;id type resnr residu atom cgnr   charge
+ 1   SP2    1     L4X     BB     1      0
+ 2   TC4    1     L4X     SC1    2      0
+
+[ bonds ]
+#meta {"group": "Side chain bonds"}
+;  i     j   funct   length  force.c.
+  BB   SC1    1       0.310    9000
+
+
+;;;; DIVALENT - CROSSLINK - PART L5X
+
+[ moleculetype ]
+; molname       nrexcl
+L5X                1
+
+[ atoms ]
+;id type resnr residu atom cgnr   charge
+ 1   SP2    1     L5X     BB     1      0
+ 2   N6a    1     L5X     SC1    2      0
+ 3  SN6d    1     L5X     SC2    3      0
+
+[ bonds ]
+#meta {"group": "Side chain bonds"}
+;  i     j   funct   length  force.c.
+  BB   SC1    1       0.360     8000
+ SC1   SC2    1       0.365     7000
+
+[angles]
+#meta {"group": "Side chain angles"}
+;  i     j    k     funct   angle  force.c.
+  BB   SC1  SC2       2   140    150
+
+
+;;;; TRIVALENT - CROSSLINK - PART LX2
+
+[ moleculetype ]
+; molname       nrexcl
+LX2                1
+
+[ atoms ]
+;id type resnr residu atom cgnr   charge
+ 1   SP2    1     LX2     BB     1      0
+ 2   TC4    1     LX2     SC1    2      0
+
+[ bonds ]
+#meta {"group": "Side chain bonds"}
+;  i     j   funct   length  force.c.
+  BB   SC1    1       0.250   14000
+
+
+;;;; TRIVALENT - CROSSLINK - PART LX3
+
+[ moleculetype ]
+; molname       nrexcl
+LX3                1
+
+[ atoms ]
+;id type resnr residu atom cgnr   charge
+ 1   SP2    1     LX3     BB     1      0
+ 2   TC4    1     LX3     SC1    2      0
+
+[ bonds ]
+#meta {"group": "Side chain bonds"}
+;  i     j   funct   length  force.c.
+  BB   SC1    1       0.250   14000
+
+
+;;;; TRIVALENT - CROSSLINK - PART LXX
+
+[ moleculetype ]
+; molname       nrexcl
+LXX                1
+
+[ atoms ]
+;id type resnr residu atom cgnr   charge
+ 1   SP2    1     LXX     BB     1     0
+ 2   TC4    1     LXX    SC1     2     0
+ 3   TC4    1     LXX    SC2     3     0
+ 4  TQ2p    1     LXX    SC3     4   0.7
+ 5  TP1q    1     LXX    SC4     5   0.2
+ 6  TC6q    1     LXX    SC5     6   0.1
+
+[bonds]
+#meta {"group": "Side chain bonds"}
+;  i     j   funct   length  force.c.
+  BB   SC1    1       0.270    14000
+ SC1   SC2    1       0.250    15000
+ SC2   SC3    1       0.260    10000
+ SC3   SC4    1       0.250    72000
+ SC3   SC5    1       0.270    72000
+ SC4   SC5    1       0.395    68000
+
+[ angles ]
+#meta {"group": "Side chain angles"}
+;  i     j    k     funct   angle  force.c.
+  BB   SC1  SC2       2   180   150
+ SC1   SC2  SC3       2   180   150
+ SC2   SC3  SC4       2   140   150
+ SC2   SC3  SC5       2   100   200
+
  ;;; GLYCINE
 
 [ moleculetype ]
@@ -1394,3 +1502,63 @@ collagen
 -BB BB SC1 1 85 200 {"group": "BBS angles LYX"}
 [ patterns ]
 -BB BB {"cgsecstruct": "F", "resname": "LYX"} SC1
+
+[ link ]
+resname $protein_resnames
+cgsecstruct "F"
+[ features ]
+collagen
+[ angles ]
+SC1 BB +BB 1 75 100 {"group": "BBS angles LX3"}
+[ patterns ]
+SC1 BB {"cgsecstruct":"F", "resname":"LX3"} +BB
+
+[ link ]
+resname $protein_resnames
+cgsecstruct "F"
+[ features ]
+collagen
+[ angles ]
+-BB BB SC1 1 75 150 {"group": "BBS angles LX3"}
+[ patterns ]
+-BB BB {"cgsecstruct": "F", "resname": "LX3"} SC1
+
+[ link ]
+resname $protein_resnames
+cgsecstruct "F"
+[ features ]
+collagen
+[ angles ]
+SC1 BB +BB 1 70 200 {"group": "BBS angles LX2"}
+[ patterns ]
+SC1 BB {"cgsecstruct": "F", "resname": "LX2"} +BB
+
+[ link ]
+resname $protein_resnames
+cgsecstruct "F"
+[ features ]
+collagen
+[ angles ]
+-BB BB SC1 1 95 153 {"group": "BBS angles LX2"}
+[ patterns ]
+-BB BB {"cgsecstruct": "F", "resname": "LX2"} SC1
+
+[ link ]
+resname $protein_resnames
+cgsecstruct "F"
+[ features ]
+collagen
+[ angles ]
+SC1 BB +BB 1 50 153 {"group": "BBS angles LXX"}
+[ patterns ]
+SC1 BB {"cgsecstruct": "F", "resname": "LXX"} +BB
+
+[ link ]
+resname $protein_resnames
+cgsecstruct "F"
+[ features ]
+collagen
+[ angles ]
+-BB BB SC1 1 85 200 {"group": "BBS angles LXX"}
+[ patterns ]
+-BB BB {"cgsecstruct": "F", "resname": "LXX"} SC1

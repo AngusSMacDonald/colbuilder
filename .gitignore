@@ -122,3 +122,5 @@ test*.yaml
 yaml_fasta/
 test/
 runs/
+M3_Collagen_Parameterisation.pdf
+M3_Collagen_SI.pdf
