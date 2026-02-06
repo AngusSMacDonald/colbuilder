@@ -36,3 +36,15 @@ Implemented the core fix in martini.py to deduplicate duplicate coarse-grained b
 Previously, multiple models sharing the same connection component were all re-martinized, producing identical merged structures under different col_N labels.
 Now, each unique (type + connection set) is built once, preventing overlapping duplicate molecules like the col_8/col_38 pattern you described.
 
+### THE REAL ISSUE ###
+There are only Martini3 parameterisations done for PYD and HLKNL crosslinks (which would be so great if they mentioned that somewhere...). Therefore I need to parameterise DPD, LKNL, deHHLNL and deHLNL myself.
+
+DPD is hydrolysed version of PYD - ie OH group on backbone is removed
+LKNL is hydrolysed version of HLKNL
+
+deHHLNL is a de-oxidised (?) version of HLKNL, and deHLNL is that for LKNL (_double-bonded oxygen removed, nitrogen on backbone double-bonded to instead_)
+
+I have made temp files for DPD and LKNL, placeholders for now but topology will build
+I need to do this for deHHLNL and deHLNL still.
+
+ALL NEW PARAMETERS STILL NEED TO BE ADDED. CURRENTLY PLACEHOLDERS (_WRONG_) OR MISSING!
