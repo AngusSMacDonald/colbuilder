@@ -283,7 +283,8 @@ class Martini:
         Decide martinize2 -nter/-cter flags robustly.
         1) Rename terminal ALA -> CLA in the PDB *before* flag decisions.
         2) If any chain starts/ends on a special block, use 'none' for that side.
-        Special blocks include ACE/CLA and crosslink blocks (LY2/LY3/L4Y/L5Y/LYX),
+        Special blocks include ACE/CLA and crosslink blocks
+        (LY2/LY3/LYX/L4Y/L5Y/L4X/L5X/LY4/LY5/LX4/LX5),
         and also NME (since it's already an explicit cap).
         """
         if not pdb:
@@ -325,8 +326,17 @@ class Martini:
             lasts  = {name for _, name in last_res.values()} if last_res else set()
 
             # Anything here means "don't ask martinize2 to apply a terminal mod":
-            special_first = {"ACE", "CLA", "LY2", "LY3", "L4Y", "L5Y", "LYX"}
-            special_last  = {"ACE", "CLA", "LY2", "LY3", "L4Y", "L5Y", "LYX", "NME"}
+            special_first = {
+                "ACE", "CLA", "LY2", "LY3", "LYX",
+                "L4Y", "L5Y", "L4X", "L5X",
+                "LY4", "LY5", "LX4", "LX5",
+            }
+            special_last  = {
+                "ACE", "CLA", "LY2", "LY3", "LYX",
+                "L4Y", "L5Y", "L4X", "L5X",
+                "LY4", "LY5", "LX4", "LX5",
+                "NME",
+            }
 
             # N-terminus: be conservative (ACE often causes issues on GLN etc. in some FF)
             nter_flag = "none" if (not firsts or (firsts & special_first)) else "none"

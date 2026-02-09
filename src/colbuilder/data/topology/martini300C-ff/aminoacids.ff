@@ -13,8 +13,8 @@
 ; limitations under the License.
 
 [ macros ]
-protein_resnames "GLY|ALA|CYS|VAL|LEU|ILE|MET|PRO|HYP|ASN|GLN|ASP|ASPP|ASH|GLU|GLUP|GLH|THR|SER|LYS|LSN|LYN|ARG|HIS|HSD|HSP|HID|HIP|HIE|PHE|TYR|TRP|NME|ACE|CLA|HYP|L4Y|L5Y|L4X|L5X|LY2|LY3|LYX|LX2|LX3|LXX"
-protein_resnames_non_pro "GLY|ALA|CYS|VAL|LEU|ILE|MET|ASN|GLN|ASP|ASPP|ASH|GLU|GLUP|GLH|THR|SER|LYS|LSN|LYN|ARG|HIS|HSD|HSP|HID|HIP|HIE|PHE|TYR|TRP|NME|ACE|CLA|HYP|L4Y|L5Y|L4X|L5X|LY2|LY3|LYX|LX2|LX3|LXX"
+protein_resnames "GLY|ALA|CYS|VAL|LEU|ILE|MET|PRO|HYP|ASN|GLN|ASP|ASPP|ASH|GLU|GLUP|GLH|THR|SER|LYS|LSN|LYN|ARG|HIS|HSD|HSP|HID|HIP|HIE|PHE|TYR|TRP|NME|ACE|CLA|HYP|L4Y|L5Y|LY4|LY5|L4X|L5X|LX4|LX5|LY2|LY3|LYX|LX2|LX3|LXX"
+protein_resnames_non_pro "GLY|ALA|CYS|VAL|LEU|ILE|MET|ASN|GLN|ASP|ASPP|ASH|GLU|GLUP|GLH|THR|SER|LYS|LSN|LYN|ARG|HIS|HSD|HSP|HID|HIP|HIE|PHE|TYR|TRP|NME|ACE|CLA|HYP|L4Y|L5Y|LY4|LY5|L4X|L5X|LX4|LX5|LY2|LY3|LYX|LX2|LX3|LXX"
 prot_default_bb_type P2
 stiff_fc 1000000
 
@@ -122,6 +122,47 @@ L5Y                1
   BB   SC1  SC2       2   140    150     
 
 
+;;;; DIVALENT - CROSSLINK - PART LY4
+
+[ moleculetype ]
+; molname       nrexcl
+LY4                1
+
+[ atoms ]
+;id type resnr residu atom cgnr   charge
+ 1   SP2    1     LY4     BB     1      0
+ 2    P1    1     LY4     SC1    2      0
+
+[ bonds ]
+#meta {"group": "Side chain bonds"}
+;  i     j   funct   length  force.c.
+  BB   SC1    1       0.310    9000
+
+
+;;;; DIVALENT - CROSSLINK - PART LY5
+
+[ moleculetype ]
+; molname       nrexcl
+LY5                1
+
+[ atoms ]
+;id type resnr residu atom cgnr   charge
+ 1   SP2    1     LY5     BB     1      0
+ 2   SC4    1     LY5     SC1    2      0
+ 3  SN6a    1     LY5     SC2    3      0
+
+[ bonds ]
+#meta {"group": "Side chain bonds"}
+;  i     j   funct   length  force.c.
+  BB   SC1    1       0.360     8000
+ SC1   SC2    1       0.365     7000
+
+[angles]
+#meta {"group": "Side chain angles"}
+;  i     j    k     funct   angle  force.c.
+  BB   SC1  SC2       2   140    150
+
+
 ;;;; TRIVALENT - CROSSLINK - PART LY2
   
   
@@ -201,7 +242,7 @@ L4X                1
 [ atoms ]
 ;id type resnr residu atom cgnr   charge
  1   SP2    1     L4X     BB     1      0
- 2   TC4    1     L4X     SC1    2      0
+ 2   SC4    1     L4X     SC1    2      0
 
 [ bonds ]
 #meta {"group": "Side chain bonds"}
@@ -220,6 +261,47 @@ L5X                1
  1   SP2    1     L5X     BB     1      0
  2   N6a    1     L5X     SC1    2      0
  3  SN6d    1     L5X     SC2    3      0
+
+[ bonds ]
+#meta {"group": "Side chain bonds"}
+;  i     j   funct   length  force.c.
+  BB   SC1    1       0.360     8000
+ SC1   SC2    1       0.365     7000
+
+[angles]
+#meta {"group": "Side chain angles"}
+;  i     j    k     funct   angle  force.c.
+  BB   SC1  SC2       2   140    150
+
+
+;;;; DIVALENT - CROSSLINK - PART LX4
+
+[ moleculetype ]
+; molname       nrexcl
+LX4                1
+
+[ atoms ]
+;id type resnr residu atom cgnr   charge
+ 1   SP2    1     LX4     BB     1      0
+ 2   SC4    1     LX4     SC1    2      0
+
+[ bonds ]
+#meta {"group": "Side chain bonds"}
+;  i     j   funct   length  force.c.
+  BB   SC1    1       0.310    9000
+
+
+;;;; DIVALENT - CROSSLINK - PART LX5
+
+[ moleculetype ]
+; molname       nrexcl
+LX5                1
+
+[ atoms ]
+;id type resnr residu atom cgnr   charge
+ 1   SP2    1     LX5     BB     1      0
+ 2   SC4    1     LX5     SC1    2      0
+ 3  SN6a    1     LX5     SC2    3      0
 
 [ bonds ]
 #meta {"group": "Side chain bonds"}
@@ -277,7 +359,7 @@ LXX                1
 ;id type resnr residu atom cgnr   charge
  1   SP2    1     LXX     BB     1     0
  2   TC4    1     LXX    SC1     2     0
- 3   TC4    1     LXX    SC2     3     0
+ 3   C1    1     LXX    SC2     3     0
  4  TQ2p    1     LXX    SC3     4   0.7
  5  TP1q    1     LXX    SC4     5   0.2
  6  TC6q    1     LXX    SC5     6   0.1

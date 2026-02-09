@@ -21,7 +21,7 @@ class Crosslink:
     angles, dihedrals) for crosslinks in Martini coarse-grained models.
     
     The class supports two families of crosslinks:
-    - Divalent HLKNL/LKNL-like crosslinks between L4Y/L4X and L5Y/L5X residues
+    - Divalent HLKNL/LKNL-like crosslinks between L4Y/L4X/LY4/LX4 and L5Y/L5X/LY5/LX5 residues
     - Trivalent PYD/DPD-like crosslinks between LYX/LXX and LY2/LX2, LY3/LX3 residues
     """
     
@@ -52,7 +52,7 @@ class Crosslink:
         self.crosslink_thresholds = {
             'LYX_LY2': 15.0,  # Maximum distance for LYX/LXX SC4 - LY2/LX2 SC1 crosslinks
             'LYX_LY3': 15.0,  # Maximum distance for LYX/LXX SC5 - LY3/LX3 SC1 crosslinks
-            'L4Y_L5Y': 15.0   # Maximum distance for L4Y/L4X SC1 - L5Y/L5X SC2 crosslinks
+            'L4Y_L5Y': 15.0   # Maximum distance for L4Y/L4X/LY4/LX4 SC1 - L5Y/L5X/LY5/LX5 SC2 crosslinks
         }
         
         # HLKNL-crosslink parameters
@@ -107,8 +107,8 @@ class Crosslink:
                         
                     if ((line[17:20] in ['LYX', 'LXX'] and line[12:15] in ['SC4', 'SC5']) or
                         (line[17:20] in ['LY2', 'LY3', 'LX2', 'LX3'] and line[12:15] == 'SC1') or
-                        (line[17:20] in ['L4Y', 'L4X'] and line[12:15] == 'SC1') or
-                        (line[17:20] in ['L5Y', 'L5X'] and line[12:15] == 'SC2')):
+                        (line[17:20] in ['L4Y', 'L4X', 'LY4', 'LX4'] and line[12:15] == 'SC1') or
+                        (line[17:20] in ['L5Y', 'L5X', 'LY5', 'LX5'] and line[12:15] == 'SC2')):
                         
                         coords = [float(line[29:38]), float(line[38:46]), float(line[46:56])]
                         
@@ -192,9 +192,9 @@ class Crosslink:
                 ly2_sc1_atoms.append(atom)
             elif atom[1] in ['LY3', 'LX3'] and atom[2] == 'SC1':
                 ly3_sc1_atoms.append(atom)
-            elif atom[1] in ['L4Y', 'L4X'] and atom[2] == 'SC1':
+            elif atom[1] in ['L4Y', 'L4X', 'LY4', 'LX4'] and atom[2] == 'SC1':
                 l4y_sc1_atoms.append(atom)
-            elif atom[1] in ['L5Y', 'L5X'] and atom[2] == 'SC2':
+            elif atom[1] in ['L5Y', 'L5X', 'LY5', 'LX5'] and atom[2] == 'SC2':
                 l5y_sc2_atoms.append(atom)
         
         LOG.debug(f"Crosslink atoms:")
@@ -202,8 +202,8 @@ class Crosslink:
         LOG.debug(f"  LYX/LXX SC5: {len(lyx_sc5_atoms)}")
         LOG.debug(f"  LY2/LX2 SC1: {len(ly2_sc1_atoms)}")
         LOG.debug(f"  LY3/LX3 SC1: {len(ly3_sc1_atoms)}")
-        LOG.debug(f"  L4Y/L4X SC1: {len(l4y_sc1_atoms)}")
-        LOG.debug(f"  L5Y/L5X SC2: {len(l5y_sc2_atoms)}")
+        LOG.debug(f"  L4Y/L4X/LY4/LX4 SC1: {len(l4y_sc1_atoms)}")
+        LOG.debug(f"  L5Y/L5X/LY5/LX5 SC2: {len(l5y_sc2_atoms)}")
         
         # Find LYX SC4 - LY2 SC1 pairs
         for lyx_atom in lyx_sc4_atoms:
@@ -300,9 +300,9 @@ class Crosslink:
                     connections_found += 1
                     LOG.info(f"Added {clx[1]}-{cly[1]} crosslink between {clx[0]} and {cly[0]} (distance: {dist:.3f} Å)")
                     
-                # L4Y/L4X SC1 - L5Y/L5X SC2 crosslinks
-                elif (clx[1] in ['L4Y', 'L4X'] and clx[2] == 'SC1' and 
-                      cly[1] in ['L5Y', 'L5X'] and cly[2] == 'SC2'):
+                # L4Y/L4X/LY4/LX4 SC1 - L5Y/L5X/LY5/LX5 SC2 crosslinks
+                elif (clx[1] in ['L4Y', 'L4X', 'LY4', 'LX4'] and clx[2] == 'SC1' and 
+                      cly[1] in ['L5Y', 'L5X', 'LY5', 'LX5'] and cly[2] == 'SC2'):
                     
                     self.crosslink_bonded['bonds'].append([
                         clx[0], cly[0], '1', self.dly45, f"{self.kly45}\n"
@@ -353,8 +353,8 @@ class Crosslink:
                     connections_found += 1
                     LOG.info(f"Added {cly[1]}-{clx[1]} crosslink between {cly[0]} and {clx[0]} (distance: {dist:.3f} Å)")
                     
-                elif (cly[1] in ['L4Y', 'L4X'] and cly[2] == 'SC1' and 
-                      clx[1] in ['L5Y', 'L5X'] and clx[2] == 'SC2'):
+                elif (cly[1] in ['L4Y', 'L4X', 'LY4', 'LX4'] and cly[2] == 'SC1' and 
+                      clx[1] in ['L5Y', 'L5X', 'LY5', 'LX5'] and clx[2] == 'SC2'):
                     
                     self.crosslink_bonded['bonds'].append([
                         cly[0], clx[0], '1', self.dly45, f"{self.kly45}\n"
