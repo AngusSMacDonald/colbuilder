@@ -1,4 +1,4 @@
-This is a helper script to build topology (martini3) for mixed fibrils. You need to have run pdb (triple-helix) generation for all crosslink types required first, and then the mixing script with force field specified but topology generation off.
+These are helper scripts to build topology for mixed fibrils. You need to have run pdb (triple-helix) generation for all crosslink types required first, and then the mixing script with force field specified but topology generation off.
 
 i.e. sample workflow in colbuilder/colbuilder-dev environment
 1. triple_helix_HLKNL.yaml (sequence generate w/ crosslink HLKNL at desired position, no geometry or topology generator, debug: true)
@@ -9,5 +9,8 @@ i.e. sample workflow in colbuilder/colbuilder-dev environment
  - set contact_distance and fibril_length as desired
  - set force_field: "martini3"
  - sequence/geometry/topology_generator: false
-4. python topology_from_mix.py mix_geometry.yaml
- - this *should* pull all requisite files together and build geometry
+4. For Martini3:
+ - `python scripts/topology_from_mix.py mix_geometry.yaml`
+5. For atomistic AMBER99:
+ - set `force_field: "amber99"` in the same mix config
+ - `python scripts/topology_from_mix_atomistic.py mix_geometry.yaml`
