@@ -292,14 +292,14 @@ class Martini:
             return [], "none", "none"
 
         try:
-            # 1) Rename terminal ALA -> CLA (bookkeeping only; never pass 'CLA' as a CLI mod)
+            # 1) Rename terminal ALA -> CLA
             chain_length = self.get_chain_length(pdb)  # e.g. {"A": " 178", "B": "...", "C": "..."}
             for i in range(len(pdb)):
                 line = pdb[i]
                 if not line.startswith(("ATOM  ", "HETATM")):
                     continue
                 if line[17:20] == "ALA":
-                    tag = line[21:26]  # e.g., "A 178"
+                    tag = line[21:26]  # e.g. "A 178"
                     if tag in {f"A{chain_length['A']}", f"B{chain_length['B']}", f"C{chain_length['C']}"}:
                         pdb[i] = line[:17] + "CLA " + line[21:]
 
@@ -338,7 +338,7 @@ class Martini:
                 "NME",
             }
 
-            # N-terminus: be conservative (ACE often causes issues on GLN etc. in some FF)
+            # N-terminus: conservative (ACE often causes issues on GLN etc. in some FF)
             nter_flag = "none" if (not firsts or (firsts & special_first)) else "none"
 
             # C-terminus: allow NME only if all chains end on standard residues (not special, not NME)

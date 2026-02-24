@@ -22,6 +22,7 @@ from colbuilder.core.utils.files import FileManager, managed_resources
 from .crystal_builder import CrystalBuilder
 from .crosslink_mixer import CrosslinkMixer
 from .geometry_replacer import CrosslinkReplacer
+from .unpaired_crosslinks import UnpairedCrosslinkFinder
 from .system import System
 from .crystal import Crystal
 from colorama import init, Fore, Style
@@ -57,6 +58,9 @@ def cleanup_temp_files(
     for dir_path in dirs_to_clean:
         if os.path.exists(dir_path) and os.path.isdir(dir_path):
             try:
+                # Preserve replace_manual directory for manual replacements
+                if os.path.basename(dir_path) == "replace_manual":
+                    continue
                 shutil.rmtree(dir_path)
                 LOG.info(f"Removed temporary directory: {dir_path}")
             except Exception as e:
@@ -143,7 +147,7 @@ class GeometryService:
         5. Writing the final mixed system to a PDB file
 
         Returns:
-            Tuple[Path, Path]: The mixing directory path and output PDB file path
+            Tuple[Optional[System], Optional[Path]]: The mixed system object and output PDB file path
 
         Raises:
             GeometryGenerationError: If mixing fails, input validation fails, or output generation fails
@@ -211,14 +215,32 @@ class GeometryService:
                 system, self.config, mixing_dir
             )
 
-            # return mixing_dir, output_pdb
+            # Verify the system has models
+            if system:
+                model_count = len(list(system.get_models()))
+                LOG.info(f"Mixed system contains {model_count} models")
+                
+                type_counts = {}
+                for model_id in system.get_models():
+                    model = system.get_model(model_id=model_id)
+                    if hasattr(model, 'type'):
+                        model_type = model.type
+                        type_counts[model_type] = type_counts.get(model_type, 0) + 1
+                LOG.info(f"Type distribution: {type_counts}")
+            else:
+                LOG.warning("System object is None after mixing")
+
+            # Copy to final output location
             if output_pdb and output_pdb.exists():
                 final_pdb: Path = self.file_manager.get_output_path(
                     self.config.output, ".pdb"
                 )
 
                 self.file_manager.copy_to_output(output_pdb, dest_name=final_pdb.name)
-                return mixing_dir, final_pdb
+                LOG.info(f"Final mixed PDB copied to: {final_pdb}")
+                
+                # Return both the system object and the PDB path
+                return system, final_pdb
             else:
                 raise GeometryGenerationError(
                     message="Mixing operation did not produce an output file",
@@ -338,7 +360,8 @@ class GeometryService:
             LOG.debug(f"Using geometry directory for generation: {geometry_dir}")
 
             self.temp_dir = geometry_dir
-
+            
+            working_dir_root = Path(self.config.working_directory).resolve()
             os.chdir(geometry_dir)
 
             temp_config = self.config.copy()
@@ -370,12 +393,12 @@ class GeometryService:
 
                 geometry_only_system = copy.deepcopy(system)
 
+                # Only write geometry-only PDB if no mixing or replacement will follow
                 if not (temp_config.mix_bool or temp_config.replace_bool):
                     output_prefix = temp_config.output or temp_config.species
                     output_pdb_path = geometry_dir / f"{output_prefix}.pdb"
 
                     import logging
-
                     original_level = LOG.level
                     try:
                         LOG.setLevel(logging.ERROR)  # Suppress non-error messages
@@ -395,13 +418,72 @@ class GeometryService:
             if temp_config.mix_bool and system:
                 LOG.section("Mixing geometry...")
                 mixing_dir = self.file_manager.ensure_mixing_dir()
-                system = await self.mixer_service.mix(system, temp_config, mixing_dir)
+                system, _ = await self.mixer_service.mix(system, temp_config, mixing_dir)
                 LOG.info("Mixing completed.")
+
+            # Determine if replacement is requested
+            replacement_requested = bool(
+                temp_config.replace_bool
+                or getattr(temp_config, "auto_fix_unpaired", False)
+                or (
+                    temp_config.ratio_replace is not None
+                    and float(temp_config.ratio_replace) > 0
+                )
+                or temp_config.replace_file
+                or getattr(temp_config, "manual_replacements", None)
+            )
+            
+            # Set verbosity flag for replacement logging
+            try:
+                temp_config._replacement_verbose = replacement_requested  # type: ignore[attr-defined]
+            except Exception:
+                pass
+
+            # Auto-detect unpaired enzymatic crosslinks and stage manual replacements
+            auto_manual_replacements: List[str] = []
+            auto_manual_file: Optional[Path] = None
+            if system:
+                try:
+                    finder = UnpairedCrosslinkFinder(base_dir=working_dir_root)
+                    auto_manual_replacements, auto_manual_file = finder.run()
+                    if auto_manual_replacements:
+                        temp_config.manual_replacements = auto_manual_replacements
+                        temp_config.replace_bool = True
+                        temp_config.auto_fix_unpaired = True
+                        
+                        # Propagate to shared config so downstream (topology) uses replace_manual
+                        try:
+                            self.config.auto_fix_unpaired = True
+                        except Exception:
+                            pass
+                        
+                        if (
+                            temp_config.ratio_replace is None
+                            and temp_config.replace_file is None
+                        ):
+                            temp_config.ratio_replace = 0
+                        
+                        LOG.debug(f"Auto-detected {len(auto_manual_replacements)} unpaired crosslinks")
+                    else:
+                        LOG.debug("No unpaired enzymatic crosslinks detected")
+                except Exception as e:
+                    LOG.warning("Automatic unpaired crosslink detection failed: %s", e)
+            else:
+                temp_config.auto_fix_unpaired = False
+
+            # Enable replacement stage when a ratio was provided without explicit replace_bool
+            if (
+                not temp_config.replace_bool
+                and temp_config.ratio_replace is not None
+                and float(temp_config.ratio_replace) > 0
+            ):
+                temp_config.replace_bool = True
+
+            # For replacement we need the original working dir (not the geometry subdir)
+            temp_config.working_directory = working_dir_root
 
             # Perform replacement if required
             if temp_config.replace_bool and system:
-                LOG.section("Replacing crosslinks...")
-
                 model_type = (
                     system.get_model(model_id=0.0).type
                     if hasattr(system.get_model(model_id=0.0), "type")
@@ -434,77 +516,83 @@ class GeometryService:
                     system, temp_config, replacement_dir
                 )
 
-                replacement_type_dir = replacement_dir / model_type
-
-                if replacement_type_dir.exists():
-                    caps_files = list(replacement_type_dir.glob("*.caps.pdb"))
-
-                    if caps_files:
-                        output_prefix = temp_config.output or temp_config.species
-                        output_pdb_path = replacement_dir / f"{output_prefix}.pdb"
-                        final_temp_dir = replacement_dir
-
-                        system.write_pdb(
-                            pdb_out=output_pdb_path,
-                            fibril_length=temp_config.fibril_length,
-                            cleanup=False,
-                            temp_dir=replacement_dir,
-                        )
-
-                        if output_pdb_path.exists():
-                            try:
-                                # Analyze post-replacement residue counts
-                                post_replacement_counts = {}
-                                with open(output_pdb_path, "r") as f:
-                                    for line in f:
-                                        if (
-                                            line.startswith(("ATOM", "HETATM"))
-                                            and len(line) >= 20
-                                        ):
-                                            resname = line[17:20].strip()
-                                            post_replacement_counts[resname] = (
-                                                post_replacement_counts.get(resname, 0)
-                                                + 1
-                                            )
-
-                            except Exception as e:
-                                LOG.warning(f"Error analyzing output PDB: {e}")
-
-                            final_pdb = self.file_manager.copy_to_output(
-                                output_pdb_path
-                            )
-                            LOG.info(
-                                f"Final PDB with replacements written to: {final_pdb}"
-                            )
-                            return system, final_pdb
-                    else:
-                        LOG.warning(
-                            "No caps files found in replacement directory. Falling back to geometry directory."
-                        )
+                # Check if replacement was skipped
+                if getattr(temp_config, "_replacement_skipped", False):
+                    temp_config.replace_bool = False
+                    LOG.debug("Replacement was skipped - no matching crosslinks found")
                 else:
-                    LOG.warning(
-                        f"Replacement type directory not found: {replacement_type_dir}"
+                    replacement_type_dir = replacement_dir / model_type
+
+                    if replacement_type_dir.exists():
+                        caps_files = list(replacement_type_dir.glob("*.caps.pdb"))
+
+                        if caps_files:
+                            output_prefix = temp_config.output or temp_config.species
+                            output_pdb_path = replacement_dir / f"{output_prefix}.pdb"
+                            final_temp_dir = replacement_dir
+
+                            system.write_pdb(
+                                pdb_out=output_pdb_path,
+                                fibril_length=temp_config.fibril_length,
+                                cleanup=False,
+                                temp_dir=replacement_dir,
+                            )
+
+                            if output_pdb_path.exists():
+                                try:
+                                    post_replacement_counts = {}
+                                    with open(output_pdb_path, "r") as f:
+                                        for line in f:
+                                            if (
+                                                line.startswith(("ATOM", "HETATM"))
+                                                and len(line) >= 20
+                                            ):
+                                                resname = line[17:20].strip()
+                                                post_replacement_counts[resname] = (
+                                                    post_replacement_counts.get(resname, 0)
+                                                    + 1
+                                                )
+                                except Exception as e:
+                                    LOG.warning(f"Error analyzing output PDB: {e}")
+
+                                final_pdb = self.file_manager.copy_to_output(
+                                    output_pdb_path
+                                )
+                                if getattr(temp_config, "_replacement_verbose", True):
+                                    LOG.info(
+                                        f"Final PDB with replacements written to: {final_pdb}"
+                                    )
+                                return system, final_pdb
+                        else:
+                            LOG.warning(
+                                "No caps files found in replacement directory. Falling back to geometry directory."
+                            )
+                    else:
+                        LOG.debug(
+                            f"Replacement type directory not found: {replacement_type_dir}"
+                        )
+
+                    # If we get here, replacement was requested but replacement directory didn't have caps
+                    # Write to the geometry directory instead
+                    output_prefix = temp_config.output or temp_config.species
+                    output_pdb_path = geometry_dir / f"{output_prefix}.pdb"
+
+                    if getattr(temp_config, "_replacement_verbose", True):
+                        LOG.info(
+                            f"Writing system with replacements to geometry directory: {output_pdb_path}"
+                        )
+                    system.write_pdb(
+                        pdb_out=output_pdb_path,
+                        fibril_length=temp_config.fibril_length,
+                        cleanup=False,
+                        temp_dir=geometry_dir,
                     )
 
-                # If we get here, replacement was requested but replacement directory didn't have caps
-                # Write to the geometry directory instead
-                output_prefix = temp_config.output or temp_config.species
-                output_pdb_path = geometry_dir / f"{output_prefix}.pdb"
-
-                LOG.info(
-                    f"Writing system with replacements to geometry directory: {output_pdb_path}"
-                )
-                system.write_pdb(
-                    pdb_out=output_pdb_path,
-                    fibril_length=temp_config.fibril_length,
-                    cleanup=False,
-                    temp_dir=geometry_dir,
-                )
-
-                if output_pdb_path.exists():
-                    final_pdb = self.file_manager.copy_to_output(output_pdb_path)
-                    LOG.info(f"Final PDB with replacements copied to: {final_pdb}")
-                    return system, final_pdb
+                    if output_pdb_path.exists():
+                        final_pdb = self.file_manager.copy_to_output(output_pdb_path)
+                        if getattr(temp_config, "_replacement_verbose", True):
+                            LOG.info(f"Final PDB with replacements copied to: {final_pdb}")
+                        return system, final_pdb
 
             # Write the final system PDB if we've done mixing (since replacement handles its own writing)
             if system and temp_config.mix_bool:
@@ -530,8 +618,7 @@ class GeometryService:
                         error_code="GEO_ERR_012",
                     )
 
-            # If we reach this point, something unusual happened - we have a system but no PDB was written
-            # This is a fallback to ensure we always have a PDB file
+            # Fallback: If we reach this point, we have a system but no PDB was written
             if system:
                 output_prefix = temp_config.output or temp_config.species
                 output_pdb_path = geometry_dir / f"{output_prefix}.pdb"
@@ -558,7 +645,6 @@ class GeometryService:
         except Exception as e:
             LOG.error(f"Error during full generation: {str(e)}")
             import traceback
-
             LOG.error(f"Traceback: {traceback.format_exc()}")
             raise GeometryGenerationError(
                 message=f"Failed to complete geometry generation: {str(e)}",
@@ -575,7 +661,6 @@ class GeometryService:
                 and self.config.debug
             ):
                 LOG.info(f"Debug mode enabled, preserving temporary directories")
-                # Create marker files as needed
                 for debug_dir in [
                     self.temp_dir,
                     self.file_manager.replacement_dir,
@@ -605,12 +690,16 @@ class GeometryService:
         crosslink replacement.
 
         Returns:
-            Generated system or None if only direct replacement was performed
+            Tuple[Optional[System], Optional[Path]]: Generated system and output PDB path
 
         Raises:
             GeometryGenerationError: If any step in the process fails
         """
         try:
+            # Allow direct replacement when a PDB is provided, even if replace_bool was not set explicitly
+            if self.config.replace_file and not self.config.geometry_generator:
+                self.config.replace_bool = True
+
             if self.config.replace_bool and not self.config.geometry_generator:
                 return await self._handle_direct_replacement()
 
@@ -709,20 +798,16 @@ async def build_geometry_anywhere(
         os.chdir(geometry_dir)
 
         try:
-            # Copy the PDB file to the geometry directory
             pdb_path: Path = file_manager.copy_to_directory(
                 config.pdb_file, dest_dir=geometry_dir
             )
             config.pdb_file = pdb_path
 
-            # Set up the crystal builder with the file manager
             crystal_builder: CrystalBuilder = CrystalBuilder(file_manager)
 
-            # Build the geometry
             system: System = await crystal_builder.build(config)
             LOG.info("Crystal structure built successfully")
 
-            # Verify output file
             output_pdb_path: Path = file_manager.get_output_path(config.output, ".pdb")
             if not output_pdb_path.exists():
                 raise GeometryGenerationError(
@@ -764,11 +849,11 @@ async def mix_geometry(system: System, config: ColbuilderConfig) -> System:
         Mixed system
     """
     mixer = CrosslinkMixer()
-    # Create a clean mixing directory
     mixing_dir = Path(config.working_directory) / ".tmp" / "mixing_crosslinks"
     mixing_dir.mkdir(parents=True, exist_ok=True)
 
-    return await mixer.mix(system, config, mixing_dir)
+    system, _ = await mixer.mix(system, config, mixing_dir)
+    return system
 
 
 async def replace_geometry(
@@ -791,7 +876,6 @@ async def replace_geometry(
     original_dir = Path.cwd()
 
     try:
-        # Create a clean replacement directory
         replace_dir = Path(config.working_directory) / ".tmp" / "replace_crosslinks"
         replace_dir.mkdir(parents=True, exist_ok=True)
         file_manager.temp_dirs.add(replace_dir)
@@ -855,7 +939,7 @@ async def replace_geometry(
                 output_prefix = temp_config.output
 
             output_pdb_path = replace_dir / f"{output_prefix}.pdb"
-            LOG.info(f"Writing final system PDB to {output_pdb} - main_geometry l781")
+            LOG.info(f"Writing final system PDB to {output_pdb_path}")
             system.write_pdb(
                 pdb_out=output_prefix,
                 fibril_length=temp_config.fibril_length,
@@ -893,3 +977,4 @@ def _is_pdb_file(file_path: str) -> bool:
             return first_line.startswith(("ATOM", "CRYST1", "HETATM"))
     except Exception:
         return False
+    

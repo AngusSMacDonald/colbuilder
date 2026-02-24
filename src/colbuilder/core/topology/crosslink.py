@@ -209,31 +209,31 @@ class Crosslink:
         for lyx_atom in lyx_sc4_atoms:
             for ly2_atom in ly2_sc1_atoms:
                 dist = np.linalg.norm(np.array(lyx_atom[-3:]) - np.array(ly2_atom[-3:]))
-                LOG.debug(f"Distance LYX SC4 (atom {lyx_atom[0]}) - LY2 SC1 (atom {ly2_atom[0]}): {dist:.3f} Å")
+                LOG.debug(f"    Distance LYX SC4 (atom {lyx_atom[0]}) - LY2 SC1 (atom {ly2_atom[0]}): {dist:.3f} Å")
                 
                 if dist <= self.crosslink_thresholds['LYX_LY2']:
                     self.crosslink_pairs.append((lyx_atom, ly2_atom))
-                    LOG.info(f"Added LYX-LY2 pair: atoms {lyx_atom[0]} - {ly2_atom[0]} (distance: {dist:.3f} Å)")
+                    LOG.info(f" Added LYX-LY2 pair: atoms {lyx_atom[0]} - {ly2_atom[0]} (distance: {dist:.3f} Å)")
         
         # Find LYX SC5 - LY3 SC1 pairs
         for lyx_atom in lyx_sc5_atoms:
             for ly3_atom in ly3_sc1_atoms:
                 dist = np.linalg.norm(np.array(lyx_atom[-3:]) - np.array(ly3_atom[-3:]))
-                LOG.debug(f"Distance LYX SC5 (atom {lyx_atom[0]}) - LY3 SC1 (atom {ly3_atom[0]}): {dist:.3f} Å")
+                LOG.debug(f"    Distance LYX SC5 (atom {lyx_atom[0]}) - LY3 SC1 (atom {ly3_atom[0]}): {dist:.3f} Å")
                 
                 if dist <= self.crosslink_thresholds['LYX_LY3']:
                     self.crosslink_pairs.append((lyx_atom, ly3_atom))
-                    LOG.info(f"Added LYX-LY3 pair: atoms {lyx_atom[0]} - {ly3_atom[0]} (distance: {dist:.3f} Å)")
+                    LOG.info(f" Added LYX-LY3 pair: atoms {lyx_atom[0]} - {ly3_atom[0]} (distance: {dist:.3f} Å)")
         
         # Find L4Y SC1 - L5Y SC2 pairs
         for l4y_atom in l4y_sc1_atoms:
             for l5y_atom in l5y_sc2_atoms:
                 dist = np.linalg.norm(np.array(l4y_atom[-3:]) - np.array(l5y_atom[-3:]))
-                LOG.debug(f"Distance L4Y SC1 (atom {l4y_atom[0]}) - L5Y SC2 (atom {l5y_atom[0]}): {dist:.3f} Å")
+                LOG.debug(f"    Distance L4Y SC1 (atom {l4y_atom[0]}) - L5Y SC2 (atom {l5y_atom[0]}): {dist:.3f} Å")
                 
                 if dist <= self.crosslink_thresholds['L4Y_L5Y']:
                     self.crosslink_pairs.append((l4y_atom, l5y_atom))
-                    LOG.info(f"Added L4Y-L5Y pair: atoms {l4y_atom[0]} - {l5y_atom[0]} (distance: {dist:.3f} Å)")
+                    LOG.info(f" Added L4Y-L5Y pair: atoms {l4y_atom[0]} - {l5y_atom[0]} (distance: {dist:.3f} Å)")
         
         return self.crosslink_pairs
     
@@ -368,7 +368,7 @@ class Crosslink:
                     connections_found += 1
                     LOG.info(f"Added {cly[1]}-{clx[1]} crosslink between {cly[0]} and {clx[0]} (distance: {dist:.3f} Å)")
                 else:
-                    LOG.debug(f"Distance {dist:.3f} Å between {clx[1]}{clx[2]} and {cly[1]}{cly[2]} - not a recognized crosslink type")
+                    LOG.debug(f"    Distance {dist:.3f} Å between {clx[1]}{clx[2]} and {cly[1]}{cly[2]} - not a recognized crosslink type")
                 
             LOG.info(f"Created {len(self.crosslink_bonded['bonds'])} bonds and "
                     f"{len(self.crosslink_bonded['angles'])} angles from "

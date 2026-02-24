@@ -111,8 +111,11 @@ glucosepane/
 logs/
 homosapiens*
 homo_sapiens*/
+testy/
 
 # misc
+singles_*/
+parameterising/
 Collagen*/
 Collagen*.fasta
 config_*.yaml
@@ -124,3 +127,4 @@ test/
 runs/
 M3_Collagen_Parameterisation.pdf
 M3_Collagen_SI.pdf
+crosslink_selections.vmd.tcl
