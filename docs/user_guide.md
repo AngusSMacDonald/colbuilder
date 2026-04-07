@@ -262,7 +262,7 @@ crystalcontacts_optimize: false # Optimize crystal contacts
 ```yaml
 mix_bool: false             # Enable mixing of different crosslink types
 ratio_mix: "D:70 T:30"      # Ratio for different crosslink types
-files_mix:                  # Required if mix_bool is true
+files_mix:                  # Required when building a new mixed fibril
  - "human-D.pdb"            # PDB file with type D crosslinks
  - "human-T.pdb"            # PDB file with type T crosslinks
 ```
@@ -410,6 +410,17 @@ force_field: "amber99"      # For all-atom simulations
 topology_generator: true
 force_field: "martini3"     # For coarse-grained simulations
 ```
+
+To reuse a previously generated mixed fibril in `.tmp/mixing_crosslinks` and run only topology generation:
+
+```yaml
+topology_generator: true
+topology_from_existing_mix: true
+force_field: "martini3"
+geometry_generator: false
+```
+
+This expects the existing mixed-system intermediates to still be present in `.tmp/mixing_crosslinks` under the selected `working_directory`.
 
 ## Troubleshooting
 

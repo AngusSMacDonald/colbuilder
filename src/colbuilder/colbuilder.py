@@ -242,7 +242,11 @@ async def run_geometry_generation(
         current_file_manager = file_manager or FileManager(config)
 
         # Handle mixing-only logic
-        if config.mix_bool and not config.geometry_generator:
+        if (
+            config.mix_bool
+            and not config.geometry_generator
+            and not config.topology_from_existing_mix
+        ):
             from colbuilder.core.geometry.main_geometry import GeometryService
 
             geometry_service = GeometryService(config, current_file_manager)
@@ -307,7 +311,7 @@ async def run_geometry_generation(
 @timeit
 async def run_topology_generation(
     config: ColbuilderConfig,
-    system_path: Path,
+    system_path: Optional[Path],
     existing_system: Optional[System] = None,
     file_manager: Optional[FileManager] = None,
 ) -> Tuple[Path, Path]:
@@ -315,19 +319,28 @@ async def run_topology_generation(
         if file_manager is None:
             file_manager = FileManager(config)
 
-        geometry_dir = Path(".tmp") / "geometry_gen"
-        if not geometry_dir.exists():
-            geometry_dir = Path.cwd() / ".tmp" / "geometry_gen"
-
-        if geometry_dir.exists():
-            LOG.debug(f"Found geometry directory: {geometry_dir}")
-            cap_files = list(geometry_dir.glob("**/*.caps.pdb"))
-            LOG.debug(f"Found {len(cap_files)} cap files in geometry directory")
+        if config.topology_from_existing_mix:
+            mixing_dir = file_manager.mixing_dir
+            if mixing_dir.exists():
+                LOG.debug(f"Found mixing directory: {mixing_dir}")
+                cap_files = list(mixing_dir.glob("**/*.caps.pdb"))
+                LOG.debug(f"Found {len(cap_files)} cap files in mixing directory")
+            else:
+                LOG.warning(f"Mixing directory not found: {mixing_dir}")
         else:
-            LOG.warning(f"Geometry directory not found: {geometry_dir}")
+            geometry_dir = Path(".tmp") / "geometry_gen"
+            if not geometry_dir.exists():
+                geometry_dir = Path.cwd() / ".tmp" / "geometry_gen"
+
+            if geometry_dir.exists():
+                LOG.debug(f"Found geometry directory: {geometry_dir}")
+                cap_files = list(geometry_dir.glob("**/*.caps.pdb"))
+                LOG.debug(f"Found {len(cap_files)} cap files in geometry directory")
+            else:
+                LOG.warning(f"Geometry directory not found: {geometry_dir}")
 
         # Use existing system if provided
-        if existing_system:
+        if existing_system and hasattr(existing_system, "get_models"):
             LOG.info(
                 f"{Fore.BLUE}Using existing system from geometry generation{Style.RESET_ALL}"
             )
@@ -342,23 +355,40 @@ async def run_topology_generation(
                         f"Model {model_id} - Type: {model.type if hasattr(model, 'type') else 'Unknown'}"
                     )
         else:
-            LOG.info("Creating new system from PDB file")
-            from colbuilder.core.geometry.crystal import Crystal
-            from colbuilder.core.geometry.system import System
+            if existing_system is not None:
+                LOG.warning(
+                    "Ignoring non-System geometry result and rebuilding topology input from the PDB file"
+                )
+            if config.topology_from_existing_mix:
+                LOG.info(
+                    "Reusing existing mixed fibril artifacts from .tmp/mixing_crosslinks for topology generation"
+                )
+                from colbuilder.core.geometry.system import System
 
-            crystal = Crystal(pdb=str(system_path))
-            system = System(crystal=crystal)
+                system = System()
+            else:
+                if system_path is None:
+                    raise TopologyGenerationError(
+                        message="A geometry PDB path is required for topology generation",
+                        error_code="TOP_ERR_001",
+                    )
+                LOG.info("Creating new system from PDB file")
+                from colbuilder.core.geometry.crystal import Crystal
+                from colbuilder.core.geometry.system import System
+
+                crystal = Crystal(pdb=str(system_path))
+                system = System(crystal=crystal)
 
         # Run topology generation with the system and file manager
         await build_topology(system, config, file_manager)
 
         # Topology files are created in [species]_topology_files directory
-        topology_dir = Path(f"{config.species}_topology_files")
+        topology_dir = Path(config.working_directory) / f"{config.species}_topology_files"
         if not topology_dir.exists():
             LOG.warning(f"Topology directory not found: {topology_dir}")
             topology_dir = Path()
 
-        return topology_dir, system_path
+        return topology_dir, system_path or file_manager.mixing_dir
 
     except Exception as e:
         LOG.error(f"Topology generation failed: {str(e)}")
@@ -412,12 +442,13 @@ async def run_pipeline(config: ColbuilderConfig) -> Dict[str, Path]:
             LOG.info(f"Direct replacement completed, output PDB: {pdb_path}")
 
         # Mix-only mode (no geometry generation)
-        elif config.mix_bool:
+        elif config.mix_bool and not config.topology_from_existing_mix:
             LOG.section("Running crosslinks mixing mode")
             current_system, pdb_path = await run_geometry_generation(
                 config, file_manager
             )
             results["geometry_pdb"] = pdb_path
+            results["geometry_system"] = current_system
             LOG.info(f"Mixing completed, output PDB: {pdb_path}")
 
         if config.geometry_generator:
@@ -434,7 +465,9 @@ async def run_pipeline(config: ColbuilderConfig) -> Dict[str, Path]:
             LOG.info(f"Geometry generation completed, output PDB: {pdb_path}")
 
         # Topology Generation
-        if config.topology_generator and results["geometry_pdb"]:
+        if config.topology_generator and (
+            results["geometry_pdb"] or config.topology_from_existing_mix
+        ):
             LOG.section("Running topology generation")
 
             # Pass the existing system to topology generation
@@ -448,6 +481,7 @@ async def run_pipeline(config: ColbuilderConfig) -> Dict[str, Path]:
                 topology_dir, system_path = await run_topology_generation(
                     config, results["geometry_pdb"]
                 )
+            results["topology_dir"] = topology_dir
 
         if not config.debug:
             file_manager.cleanup()
@@ -507,17 +541,30 @@ def log_configuration_summary(cfg: ColbuilderConfig) -> None:
             ),
             f"Fibril Length: {cfg.fibril_length}",
             "Crosslinks:",
-            f"    Mix Ratio: {cfg.ratio_mix}" if cfg.mix_bool else None,
-            f"    Mix Files: {cfg.files_mix}" if cfg.mix_bool else None,
+            (
+                f"    Mix Ratio: {cfg.ratio_mix}"
+                if cfg.mix_bool and not cfg.topology_from_existing_mix and cfg.ratio_mix is not None
+                else None
+            ),
+            (
+                f"    Mix Files: {cfg.files_mix}"
+                if cfg.mix_bool and not cfg.topology_from_existing_mix and cfg.files_mix is not None
+                else None
+            ),
+            (
+                "    Reuse Existing Mix: True"
+                if cfg.topology_from_existing_mix
+                else None
+            ),
             f"    Replace Ratio: {cfg.ratio_replace}%" if cfg.replace_bool else None,
             (
                 f"    N-terminal: {cfg.n_term_type}, {cfg.n_term_combination}"
-                if (cfg.crosslink and not cfg.mix_bool)
+                if (cfg.crosslink and not cfg.mix_bool and not cfg.topology_from_existing_mix)
                 else f" N-terminal: No additional crosslinks"
             ),
             (
                 f"    C-terminal: {cfg.c_term_type}, {cfg.c_term_combination}"
-                if (cfg.crosslink and not cfg.mix_bool)
+                if (cfg.crosslink and not cfg.mix_bool and not cfg.topology_from_existing_mix)
                 else f" C-terminal: No additional crosslinks"
             ),
         ],
@@ -525,6 +572,7 @@ def log_configuration_summary(cfg: ColbuilderConfig) -> None:
             "Sequence Generation \u2713" if cfg.sequence_generator else None,
             "Geometry Generation \u2713" if cfg.geometry_generator else None,
             "Mix Crosslinks \u2713" if cfg.mix_bool else None,
+            "Reuse Existing Mix \u2713" if cfg.topology_from_existing_mix else None,
             "Replace Crosslinks \u2713" if cfg.replace_bool else None,
             "Topology Generation \u2713" if cfg.topology_generator else None,
         ],
@@ -883,8 +931,6 @@ def main(**kwargs: Any) -> int:
             log_exception(LOG, e)
         else:
             print(f"CRITICAL ERROR: {str(e)}")
-            import traceback
-
             traceback.print_exc()
         return 1
 

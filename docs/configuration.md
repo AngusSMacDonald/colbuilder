@@ -172,7 +172,7 @@ These parameters control advanced features for creating mixed crosslinked microf
 |-----------|------|---------|-------------|
 | `mix_bool` | boolean | false | Enable mixing of different crosslink types |
 | `ratio_mix` | string | "D:70 T:30" | Format: "Type:percentage Type:percentage" |
-| `files_mix` | list of strings | | Required if mix_bool is true, paths to PDB files with different crosslink types |
+| `files_mix` | list of strings | | Required when building a new mixed fibril, paths to PDB files with different crosslink types |
 | `replace_bool` | boolean | false | Enable crosslink replacement (with lysines) |
 | `ratio_replace` | integer | 30 | Percentage of crosslinks to replace |
 | `replace_file` | string, null | null | File with crosslinks to be replaced |
@@ -181,6 +181,7 @@ These parameters control advanced features for creating mixed crosslinked microf
 - The `mix_bool` feature allows creation of heterogeneous crosslinked microfibrils, which more closely resemble natural collagen.
 - The `ratio_mix` parameter specifies the proportion of each crosslink type in the mixed microfibril.
 - The `files_mix` parameter specifies the path to the PDB files of two collagen molecules, each with a different crosslink type.
+- When `topology_from_existing_mix: true` is used to rerun topology from an existing mixed fibril, `ratio_mix` and `files_mix` are not required.
 - The `replace_bool` feature simulates partial crosslinking by replacing some crosslinks with unmodified lysine residues.
 - The `ratio_replace` parameter controls what percentage of crosslinks should be replaced.
 - The `replace_file` parameter specifies the path to the PDB file of a previously generated collagen microfibril.
@@ -192,6 +193,7 @@ These parameters control the generation of topology files for molecular dynamics
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `force_field` | string | "amber99" | Force field for topology generation |
+| `topology_from_existing_mix` | boolean | false | Reuse `.tmp/mixing_crosslinks` and only run topology generation for a previously mixed fibril |
 
 **Available Force Field Options**:
 - **amber99**: Standard Amber99 force field (add publication) 
@@ -199,6 +201,9 @@ These parameters control the generation of topology files for molecular dynamics
 
 **Notes**:
 - The `force_field` parameter selects which force field to use for generating topology files.
+- `force_field` is required whenever `topology_generator: true`.
+- Set `topology_from_existing_mix: true` together with `topology_generator: true` to rerun topology from an existing mixed fibril without repeating the mixing step.
+- `topology_from_existing_mix` expects the previously generated mixed-fibril intermediates to still exist under `.tmp/mixing_crosslinks` in the configured `working_directory`.
 - The amber99 force field is recommended for most atomistic simulations of collagen.
 - Custom force field parameters for collagen and crosslinks are included in ColBuilder.
 

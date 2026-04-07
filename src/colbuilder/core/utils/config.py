@@ -235,6 +235,10 @@ class ColbuilderConfig(BaseModel):
         default=False, description="Generate topology files"
     )
     force_field: Optional[str] = Field(None, description="Force field to be used")
+    topology_from_existing_mix: bool = Field(
+        default=False,
+        description="Reuse .tmp/mixing_crosslinks and only run topology generation for an existing mixed fibril",
+    )
     topology_debug: Optional[bool] = Field(
         default=False,
         description="Save all intermediate files used in building topology",
@@ -344,8 +348,6 @@ class ColbuilderConfig(BaseModel):
             data["working_directory"] = Path.cwd().resolve()
 
         super().__init__(**data)
-        if self.mix_bool and self.ratio_mix is not None:
-            self.ratio_mix = self._convert_ratio_mix(self.ratio_mix)
         self.solution_space = self._convert_to_tuple(self.solution_space)
         self.files_mix = tuple(self.files_mix) if self.files_mix else None
         self.set_mode()
@@ -403,7 +405,7 @@ class ColbuilderConfig(BaseModel):
                     )
         # If sequence_generator is False, validate that PDB file is provided
         elif not self.sequence_generator and self.species not in self._species_map:
-            if self.pdb_file is None:
+            if self.pdb_file is None and not self.topology_from_existing_mix:
                 raise ConfigurationError(
                     "When using a custom species with sequence_generator=False, a PDB file must be provided",
                     error_code="CFG_ERR_003",
@@ -459,6 +461,16 @@ class ColbuilderConfig(BaseModel):
         return value
 
     @model_validator(mode="after")
+    def validate_topology_requirements(self) -> "ColbuilderConfig":
+        """Validate topology generation requirements."""
+        if self.topology_generator and self.force_field is None:
+            raise ConfigurationError(
+                "force_field is required when topology_generator is True",
+                error_code="CFG_ERR_006",
+            )
+        return self
+
+    @model_validator(mode="after")
     def validate_species_requirements(self) -> "ColbuilderConfig":
         """Validate species and related requirements."""
         # If sequence generator is True, species must be from predefined list or fasta_file must be provided
@@ -470,7 +482,7 @@ class ColbuilderConfig(BaseModel):
                 )
         # If sequence generator is False and species is not from predefined list, PDB file must be provided
         elif self.species not in self._species_map:
-            if self.pdb_file is None:
+            if self.pdb_file is None and not self.topology_from_existing_mix:
                 raise ConfigurationError(
                     "When using a custom species with sequence_generator=False, a PDB file must be provided",
                     error_code="CFG_ERR_003",
@@ -542,7 +554,7 @@ class ColbuilderConfig(BaseModel):
             self.mode |= OperationMode.GEOMETRY
         if self.topology_generator:
             self.mode |= OperationMode.TOPOLOGY
-        if self.mix_bool:
+        if self.mix_bool or self.topology_from_existing_mix:
             self.mode |= OperationMode.MIX
         if self.replace_bool:
             self.mode |= OperationMode.REPLACE
@@ -650,25 +662,39 @@ class ColbuilderConfig(BaseModel):
             )
 
     @model_validator(mode="after")
-    def validate_mix_config(cls, values):
+    def validate_mix_config(self) -> "ColbuilderConfig":
         """Validate mixing configuration including fibril_length."""
-        if values.mix_bool:
-            if values.ratio_mix is None:
+        if self.mix_bool and not self.topology_from_existing_mix:
+            if self.ratio_mix is None:
                 raise ConfigurationError(
                     "ratio_mix is required when mix_bool is True",
                     error_code="CFG_ERR_004",
                 )
-            if not values.files_mix:
+            if not self.files_mix:
                 raise ConfigurationError(
                     "files_mix is required when mix_bool is True",
                     error_code="CFG_ERR_004",
                 )
-            if values.fibril_length is None:
-                values.fibril_length = values.get(
-                    "fibril_length", 40.0
-                )  # Default to 40 for mixing
-            LOG.debug(f"Validated fibril_length for mixing: {values.fibril_length}")
-        return values
+            if self.fibril_length is None:
+                self.fibril_length = 40.0
+            LOG.debug(f"Validated fibril_length for mixing: {self.fibril_length}")
+        return self
+
+    @model_validator(mode="after")
+    def validate_existing_mix_topology_config(self) -> "ColbuilderConfig":
+        """Validate pure topology generation from an existing mixed fibril."""
+        if self.topology_from_existing_mix:
+            if not self.topology_generator:
+                raise ConfigurationError(
+                    "topology_from_existing_mix requires topology_generator=True",
+                    error_code="CFG_ERR_006",
+                )
+            if self.geometry_generator:
+                raise ConfigurationError(
+                    "topology_from_existing_mix cannot be combined with geometry_generator=True",
+                    error_code="CFG_ERR_006",
+                )
+        return self
 
     @model_validator(mode="after")
     def validate_replace_config(self) -> "ColbuilderConfig":

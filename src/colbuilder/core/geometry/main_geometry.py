@@ -218,7 +218,7 @@ class GeometryService:
                 )
 
                 self.file_manager.copy_to_output(output_pdb, dest_name=final_pdb.name)
-                return mixing_dir, final_pdb
+                return system, final_pdb
             else:
                 raise GeometryGenerationError(
                     message="Mixing operation did not produce an output file",
@@ -395,7 +395,10 @@ class GeometryService:
             if temp_config.mix_bool and system:
                 LOG.section("Mixing geometry...")
                 mixing_dir = self.file_manager.ensure_mixing_dir()
-                system = await self.mixer_service.mix(system, temp_config, mixing_dir)
+                system, output_pdb_path = await self.mixer_service.mix(
+                    system, temp_config, mixing_dir
+                )
+                final_temp_dir = mixing_dir
                 LOG.info("Mixing completed.")
 
             # Perform replacement if required
@@ -508,12 +511,17 @@ class GeometryService:
 
             # Write the final system PDB if we've done mixing (since replacement handles its own writing)
             if system and temp_config.mix_bool:
+                if output_pdb_path and output_pdb_path.exists():
+                    final_pdb = self.file_manager.copy_to_output(output_pdb_path)
+                    LOG.info(f"Final mixed PDB copied to: {final_pdb}")
+                    return system, final_pdb
+
                 output_prefix = temp_config.output or temp_config.species
                 output_pdb_path = final_temp_dir / f"{output_prefix}.pdb"
 
                 LOG.info(f"Writing final mixed system PDB to {output_pdb_path}")
                 system.write_pdb(
-                    pdb_out=output_prefix,
+                    pdb_out=output_pdb_path,
                     fibril_length=temp_config.fibril_length,
                     cleanup=False,
                     temp_dir=final_temp_dir,
@@ -523,12 +531,12 @@ class GeometryService:
                     final_pdb = self.file_manager.copy_to_output(output_pdb_path)
                     LOG.info(f"Final mixed PDB copied to: {final_pdb}")
                     return system, final_pdb
-                else:
-                    LOG.error(f"Output PDB not found at: {output_pdb_path}")
-                    raise GeometryGenerationError(
-                        message="Failed to create output PDB file",
-                        error_code="GEO_ERR_012",
-                    )
+
+                LOG.error(f"Output PDB not found at: {output_pdb_path}")
+                raise GeometryGenerationError(
+                    message="Failed to create output PDB file",
+                    error_code="GEO_ERR_012",
+                )
 
             # If we reach this point, something unusual happened - we have a system but no PDB was written
             # This is a fallback to ensure we always have a PDB file
@@ -614,7 +622,11 @@ class GeometryService:
             if self.config.replace_bool and not self.config.geometry_generator:
                 return await self._handle_direct_replacement()
 
-            if self.config.mix_bool and not self.config.geometry_generator:
+            if (
+                self.config.mix_bool
+                and not self.config.geometry_generator
+                and not self.config.topology_from_existing_mix
+            ):
                 return await self._handle_mixing_only()
 
             if (

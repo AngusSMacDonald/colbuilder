@@ -36,7 +36,7 @@ crystalcontacts_optimize: false # Note: This is automatically true when generati
 # Mixing Options (for mixed crosslinked microfibril)
 mix_bool: false
 ratio_mix: "D:70 T:30"  # Format: "Type:percentage Type:percentage"
-files_mix:              # Required if mix_bool is true
+files_mix:              # Required when building a new mixed fibril
   - "human-D.pdb"       # Divalent
   - "human-T.pdb"       # Trivalent
 
@@ -47,3 +47,4 @@ replace_file: null      # File with crosslinks to be replaced
 
 # Topology Options
 force_field: "amber99"  # Options: "amber99", "martini3"
+topology_from_existing_mix: false  # If true: reuse .tmp/mixing_crosslinks and only build topology

@@ -8,11 +8,12 @@ topology file organization.
 
 import os
 from pathlib import Path
-from typing import Any, Optional, Set, List
+from typing import Any, Optional, Set, List, Dict
 import shutil
 from colorama import init, Fore, Style
 
 from colbuilder.core.utils.files import FileManager, managed_resources
+from colbuilder.core.geometry.model import Model
 from colbuilder.core.geometry.system import System
 from colbuilder.core.topology.amber import Amber, build_amber99
 from colbuilder.core.topology.martini import Martini, build_martini3
@@ -37,6 +38,108 @@ TEMP_FILES_TO_CLEAN: Set[str] = {
     '*.CG.pdb',
     'D'
 }
+
+
+def _parse_model_id(token: str) -> float:
+    clean = token.strip()
+    for suffix in (".caps.pdb", ".pdb"):
+        if clean.endswith(suffix):
+            clean = clean[: -len(suffix)]
+            break
+    return float(clean)
+
+
+def _parse_connect_file(connect_file: Path) -> Dict[float, Dict[str, List[float]]]:
+    mapping: Dict[float, Dict[str, List[float]]] = {}
+    with open(connect_file, "r") as handle:
+        for raw in handle:
+            line = raw.strip()
+            if not line:
+                continue
+
+            if ";" in line:
+                left, right = line.split(";", 1)
+                model_type = right.strip()
+            else:
+                left, model_type = line, "A"
+
+            ids = [_parse_model_id(token) for token in left.split() if token.strip()]
+            if not ids:
+                continue
+
+            for model_id in ids:
+                mapping[model_id] = {"type": model_type, "connect": ids}
+
+    return mapping
+
+
+def _build_system_from_connect(connect_file: Path) -> System:
+    system = System()
+    for model_id, info in _parse_connect_file(connect_file).items():
+        model = Model(id=model_id, transformation=[0.0, 0.0, 0.0])
+        model.type = info["type"]
+        model.add_connect(connect_id=model_id, connect=info["connect"])
+        system.add_model(model)
+    return system
+
+
+def _copy_caps(src_root: Path, dest_root: Path) -> None:
+    for cap_file in src_root.glob("**/*.caps.pdb"):
+        rel_path = cap_file.relative_to(src_root)
+        dest_dir = dest_root / rel_path.parent
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(cap_file, dest_dir / cap_file.name)
+
+
+def _system_has_topology_metadata(system: Optional[System]) -> bool:
+    if system is None or not hasattr(system, "get_models"):
+        return False
+
+    try:
+        for model_id in system.get_models():
+            model = system.get_model(model_id=model_id)
+            if getattr(model, "type", None) and getattr(model, "connect", None):
+                return True
+    except Exception:
+        return False
+
+    return False
+
+
+def _prepare_topology_inputs(
+    system: System,
+    config: ColbuilderConfig,
+    file_manager: FileManager,
+    topology_dir: Path,
+) -> System:
+    if config.mix_bool or config.topology_from_existing_mix:
+        mixing_dir = file_manager.mixing_dir
+        connect_candidates = (
+            mixing_dir / "connect_from_colbuilder.txt",
+            mixing_dir / "connect_from_colbuilder",
+        )
+        connect_file = next((path for path in connect_candidates if path.exists()), None)
+
+        _copy_caps(mixing_dir, topology_dir)
+
+        if connect_file is not None:
+            LOG.info("Using mixed fibril caps and connectivity from the mixing directory")
+            return _build_system_from_connect(connect_file)
+
+        if _system_has_topology_metadata(system):
+            LOG.warning(
+                "Mixing connect file not found; reusing the in-memory system for topology generation"
+            )
+            return system
+
+        raise TopologyGenerationError(
+            message="Mixed topology generation requires connect_from_colbuilder.txt in .tmp/mixing_crosslinks",
+            error_code="TOP_ERR_001",
+            context={"mixing_dir": str(mixing_dir)},
+        )
+
+    _copy_caps(file_manager.geometry_dir, topology_dir)
+    return system
 
 def cleanup_temporary_files(ff_name: str, temp_patterns: Set[str], search_dirs: Optional[List[Path]] = None) -> None:
     """
@@ -163,27 +266,12 @@ async def build_topology(system: System, config: ColbuilderConfig, file_manager:
     try:
         file_manager = file_manager or FileManager(config)
         topology_dir = file_manager.get_temp_dir("topology_gen")
+        system = _prepare_topology_inputs(system, config, file_manager, topology_dir)
         original_dir = Path.cwd()
         output_topology_dir = None
         
         try:
             os.chdir(topology_dir)
-            geometry_dir = Path(".tmp/geometry_gen")
-            if not geometry_dir.exists():
-                geometry_dir = Path(original_dir) / ".tmp" / "geometry_gen"
-            
-            if geometry_dir.exists():
-                cap_files = list(geometry_dir.glob("**/*.caps.pdb"))
-                
-                if list(system.get_models()):
-                    first_model = system.get_model(model_id=list(system.get_models())[0])
-                    model_type = first_model.type
-                    type_dir = topology_dir / model_type
-                    type_dir.mkdir(exist_ok=True, parents=True)
-                    
-                    for cap_file in cap_files:
-                        dest_file = type_dir / cap_file.name
-                        shutil.copy(cap_file, dest_file)
             
             force_field = config.force_field
             

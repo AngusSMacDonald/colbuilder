@@ -114,7 +114,7 @@ The most commonly used parameters for ColBuilder configuration:
 | replace_file | Path | Input PDB file of fibril with crosslinks to be replaced | Valid file path | None |
 
 **Validation Rules**:
-- When mix_bool=true, ratio_mix and files_mix must be provided
+- When mix_bool=true and topology_from_existing_mix=false, ratio_mix and files_mix must be provided
 - Percentages in ratio_mix must sum to 100
 - When replace_bool=true, either geometry_generation=true or replace_file must be provided
 - ratio_replace must be between 0 and 100
@@ -125,10 +125,16 @@ The most commonly used parameters for ColBuilder configuration:
 |-----------|------|-------------|--------------|---------|
 | topology_generator | boolean | Generate topology files | true/false | false |
 | force_field | string | Force field for simulations | "amber99", "martini3" | None |
+| topology_from_existing_mix | boolean | Reuse `.tmp/mixing_crosslinks` and build topology from an existing mixed fibril | true/false | false |
 | martinize2_command | string | Detected Martinize2 command path | Valid executable path | Auto-detected |
 | martinize2_env | string | Detected Martinize2 conda environment | Valid conda environment name | Auto-detected |
 | use_conda_run | boolean | Use conda run for Martinize2 | true/false | false |
 | go_epsilon | float | GO epsilon for Martini3-CG parametrization | Positive number | 9.414 |
+
+**Validation Rules**:
+- When topology_generator=true, force_field must be provided
+- When topology_from_existing_mix=true, topology_generator must also be true
+- topology_from_existing_mix expects existing mixed intermediates under `.tmp/mixing_crosslinks`
 
 ## Internal Data Structures
 
