@@ -267,6 +267,11 @@ class ColbuilderConfig(BaseModel):
         default=False, description="Generate topology files"
     )
     force_field: Optional[str] = Field(None, description="Force field to be used")
+    amber_topology_mode: Literal["legacy", "specbond"] = Field(
+        default="legacy",
+        description="Amber topology backend (legacy or specbond)",
+    )
+    water_type: Literal["tip3p", "tip4p", "tip4pew", "spc", "spce"] = "tip3p"
     topology_debug: Optional[bool] = Field(
         default=False,
         description="Save all intermediate files used in building topology",
@@ -736,6 +741,12 @@ class ColbuilderConfig(BaseModel):
             raise ConfigurationError(
                 "force_field is required for topology generation "
                 "(supported: 'amber99' or 'martini3')",
+                error_code="CFG_ERR_006",
+            )
+        if self.amber_topology_mode == "specbond" and self.force_field != "amber99":
+            raise ConfigurationError(
+                "amber_topology_mode 'specbond' is only supported with "
+                "force_field 'amber99'",
                 error_code="CFG_ERR_006",
             )
         return self

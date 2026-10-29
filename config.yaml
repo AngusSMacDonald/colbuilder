@@ -186,6 +186,8 @@ replace_file: "rattus_norvegicus.pdb"   # PDB containing the crosslinks to repla
 # Generate molecular-dynamics topology files for the final structure.
 
 force_field: "amber99"    # "amber99" (all-atom) or "martini3" (coarse-grained).
+amber_topology_mode: legacy  # "legacy" (default) or opt-in "specbond"; Amber99 only.
+water_type: "tip3p"       # Amber water topology: tip3p, tip4p, tip4pew, spc, or spce.
 topology_debug: false     # Save all intermediate topology files.
 
 # --- Martini3-specific (ignored for amber99) ---

@@ -30,9 +30,15 @@ REQUIRED_FF_FILES = ['residuetypes.dat', 'specbond.dat']
 class Amber:
     """AMBER99 force field topology generator with crosslink handling."""
 
-    def __init__(self, system: Optional[System] = None, ff: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        system: Optional[System] = None,
+        ff: Optional[str] = None,
+        water_type: str = "tip3p",
+    ) -> None:
         self.system = system
         self.ff = ff + '.ff' if ff else None
+        self.water_type = water_type
         self.pdb_line_types = ('ATOM  ', 'HETATM', 'ANISOU', 'TER   ')
 
     def get_connected_groups(self) -> List[List[int]]:
@@ -890,7 +896,7 @@ class Amber:
                     f.write(f'#include "{itp_file}"\n')
 
             f.write(f'#include "./{self.ff}/ions.itp"\n')
-            f.write(f'#include "./{self.ff}/tip3p.itp"\n')
+            f.write(f'#include "./{self.ff}/{self.water_type}.itp"\n')
             f.write('\n\n[ system ]\n ;name\nCollagen Microfibril in Water\n\n[ molecules ]\n;name  number\n')
 
             for group_type, group_id in processed_groups:
@@ -957,7 +963,7 @@ async def build_amber99(system: System, config: ColbuilderConfig, file_manager: 
     working_dir = Path.cwd()
     copied_ff_dir = working_dir / ff_name
 
-    amber = Amber(system=system, ff=ff)
+    amber = Amber(system=system, ff=ff, water_type=config.water_type)
     file_manager = file_manager or FileManager(config)
     steps = 3
 
@@ -1015,7 +1021,7 @@ async def build_amber99(system: System, config: ColbuilderConfig, file_manager: 
                     continue
 
                 gmx_cmd = (f'export GMXLIB={working_dir} && gmx pdb2gmx -f {merge_pdb_path} '
-                          f'-ignh -merge all -ff {ff} -water tip3p '
+                          f'-ignh -merge all -ff {ff} -water {config.water_type} '
                           f'-p col_{group_id}.top -o col_{group_id}.gro '
                           f'-i posre_{group_id}.itp')
 

@@ -298,6 +298,18 @@ For the **complete reference** of every configuration option (mixing,
 replacement, AGE/mutated-PDB workflow, custom species, all defaults and
 validation rules), see the [Configuration Reference](docs/configuration.md).
 
+#### Specbond Amber Topology
+
+Use the opt-in `specbond` backend in topology-only or combined workflows:
+
+```yaml
+force_field: "amber99"
+amber_topology_mode: "specbond"
+water_type: "tip4p"
+```
+
+The defaults remain `legacy` and `tip3p`. Other bundled water types are `tip4pew`, `spc`, and `spce`.
+
 ### Example Workflows
 
 [`docs/examples/`](docs/examples/) contains complete, runnable configs for

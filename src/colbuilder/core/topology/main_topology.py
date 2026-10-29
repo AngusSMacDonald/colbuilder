@@ -14,7 +14,7 @@ from colorama import init, Fore, Style
 
 from colbuilder.core.utils.files import FileManager
 from colbuilder.core.geometry.system import System
-from colbuilder.core.topology.amber import Amber, build_amber99
+from colbuilder.core.topology.amber import Amber, build_amber99, REQUIRED_FF_FILES
 from colbuilder.core.topology.martini import Martini, build_martini3
 from colbuilder.core.utils.dec import timeit
 from colbuilder.core.utils.config import ColbuilderConfig
@@ -223,7 +223,16 @@ async def build_topology(system: System, config: ColbuilderConfig, file_manager:
             if force_field == 'amber99':
                 ff = f"{force_field}sb-star-ildnp"
                 LOG.subsection(f'Building topology based on the {force_field} force field')
-                await build_amber99(system=system, config=config, file_manager=file_manager)
+                if config.amber_topology_mode == "specbond":
+                    from colbuilder.core.topology.amber_specbond import build_amber99_specbond
+
+                    await build_amber99_specbond(
+                        system=system, config=config, file_manager=file_manager
+                    )
+                else:
+                    await build_amber99(
+                        system=system, config=config, file_manager=file_manager
+                    )
                 
             elif force_field == 'martini3':
                 ff = force_field
@@ -289,6 +298,17 @@ async def build_topology(system: System, config: ColbuilderConfig, file_manager:
                     LOG.info(f"Force field directory '{ff_dir_name}' copied to output directory")
                 except Exception as e:
                     LOG.warning(f"Failed to copy force field directory '{ff_dir_name}': {str(e)}")
+
+            if (
+                force_field == "amber99"
+                and config.amber_topology_mode == "specbond"
+            ):
+                for filename in REQUIRED_FF_FILES:
+                    source = Path(filename)
+                    if source.exists():
+                        file_manager.copy_to_directory(
+                            source, dest_dir=output_topology_dir
+                        )
             
             # Inform user about force field files
             ff_files_present = (output_topology_dir / ff_dir_name).exists()

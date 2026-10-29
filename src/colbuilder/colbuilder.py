@@ -319,6 +319,10 @@ async def run_topology_generation(
             crystal = Crystal(pdb=str(system_path))
             system = System(crystal=crystal)
 
+        # The specbond backend must split the final fibril, whose sequential
+        # collagen order can differ from sparse geometry model IDs.
+        system.pdb_fibril = Path(system_path).resolve()
+
         # Generate topology files
         await build_topology(system, config, file_manager)
 
@@ -930,6 +934,11 @@ def initialize_logging(debug=False, working_dir=None, config_file=None):
     "-ff",
     "--force_field",
     help="Specify force field to be used, e.g. -ff amber99 OR -ff martini3",
+)
+@click.option(
+    "--amber-topology-mode",
+    type=click.Choice(["legacy", "specbond"]),
+    help="Select the Amber topology backend (default: legacy)",
 )
 @click.option(
     "-top_debug",

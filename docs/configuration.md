@@ -255,6 +255,8 @@ These parameters control the generation of topology files for molecular dynamics
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `force_field` | string, null | null | Force field for topology generation |
+| `amber_topology_mode` | string | "legacy" | Amber99 topology backend: `legacy`, or `specbond` to let `pdb2gmx` create crosslink bonds from `specbond.dat` and verify each expected bond |
+| `water_type` | string | "tip3p" | Water model passed to `pdb2gmx` and included in the topology: `tip3p`, `tip4p`, `tip4pew`, `spc`, `spce` |
 | `topology_debug` | boolean | false | Save intermediate topology files for debugging |
 | `go_epsilon` | float | 9.414 | Go-model epsilon value for Martini3 coarse-grained parametrization |
 
@@ -268,6 +270,7 @@ These parameters control the generation of topology files for molecular dynamics
 - Custom force field parameters for collagen and crosslinks are included in ColBuilder.
 - Martini3 crosslink parametrization currently only covers PYD and HLKNL; other crosslink types (DPD, PYL, DPL, MOLD, and the non-enzymatic AGE types) are not yet parametrized for Martini3 and will not produce correct coarse-grained bonded terms — use `force_field: "amber99"` for those.
 - Set `topology_debug: true` to keep intermediate files for troubleshooting topology generation issues.
+- `amber_topology_mode: "specbond"` requires `force_field: "amber99"`. It supports crosslink chemistries that have records in the bundled `specbond.dat` (for example PYD and HLKNL); the trivalent DPD, PYL and DPL types are not yet supported in specbond mode.
 - **Topology-only mode**: When both `sequence_generator` and `geometry_generator` are false, topology generation can process existing fibril PDB files directly.
 
 ## Common Configuration Examples
