@@ -270,7 +270,9 @@ These parameters control the generation of topology files for molecular dynamics
 - Custom force field parameters for collagen and crosslinks are included in ColBuilder.
 - Martini3 crosslink parametrization currently only covers PYD and HLKNL; other crosslink types (DPD, PYL, DPL, MOLD, and the non-enzymatic AGE types) are not yet parametrized for Martini3 and will not produce correct coarse-grained bonded terms — use `force_field: "amber99"` for those.
 - Set `topology_debug: true` to keep intermediate files for troubleshooting topology generation issues.
-- `amber_topology_mode: "specbond"` requires `force_field: "amber99"`. It supports crosslink chemistries that have records in the bundled `specbond.dat` (for example HLKNL, LKNL, PYD, DPD, PYL and DPL) and stops with an error if a required record or bond is missing.
+- `amber_topology_mode: "specbond"` requires `force_field: "amber99"` when `topology_generator: true`. It supports the crosslink chemistries that have records in the bundled `specbond.dat` (HLKNL, LKNL, deHHLNL, deHLNL, PYD, DPD, PYL, DPL, Glucosepane, Pentosidine, MOLD and DiTyrosineFromPhe). It stops with an error if a required record is missing, if an expected crosslink bond is absent, or if `pdb2gmx` creates more crosslink bonds than expected.
+- In both Amber modes a crosslink residue bonds only its matching partner (for example L4Y-L5Y, L4X-L5X, LGX-AGS). In a fibril that mixes crosslink types, neighbouring mismatched residues such as L4Y and L5X are left unbonded.
+- `legacy` and `specbond` give the same crosslink bonds, angles, dihedrals and 1-4 pairs. See [Validating a Topology](validation.md) for how to compare them.
 - **Topology-only mode**: When both `sequence_generator` and `geometry_generator` are false, topology generation can process existing fibril PDB files directly.
 
 ## Common Configuration Examples

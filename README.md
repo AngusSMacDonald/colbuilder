@@ -298,17 +298,28 @@ For the **complete reference** of every configuration option (mixing,
 replacement, AGE/mutated-PDB workflow, custom species, all defaults and
 validation rules), see the [Configuration Reference](docs/configuration.md).
 
-#### Specbond Amber Topology
+#### Amber Topology Modes
 
-Use the opt-in `specbond` backend in topology-only or combined workflows:
+With `force_field: "amber99"`, `amber_topology_mode` selects how crosslink
+bonds get into the topology:
 
 ```yaml
 force_field: "amber99"
-amber_topology_mode: "specbond"
-water_type: "tip4p"
+amber_topology_mode: "specbond"   # default: "legacy"
+water_type: "tip3p"               # also tip4p, tip4pew, spc, spce
 ```
 
-The defaults remain `legacy` and `tip3p`. Other bundled water types are `tip4pew`, `spc`, and `spce`.
+| Mode | What it does | When to use |
+|------|--------------|-------------|
+| `legacy` (default) | Runs `pdb2gmx` on each group of crosslinked molecules, then adds the crosslink bonds, angles, dihedrals and 1-4 pairs in Python. | Reproducing earlier ColBuilder topologies. |
+| `specbond` | Splits the final fibril into its collagen molecules, groups the molecules joined by crosslinks (within 5 Å), and runs `pdb2gmx` once per group with a `specbond.dat` tuned to the observed crosslink distances, so `pdb2gmx` writes every bonded term itself. It then checks that every expected crosslink bond is present and that no extra ones were made, and stops with an error otherwise. | New atomistic systems, or whenever you want GROMACS-generated crosslink terms with a built-in check. |
+
+Both modes bond a crosslink only to its matching partner (for example
+L4Y-L5Y for HLKNL, never L4Y-L5X), the same pairing the geometry step uses.
+Crosslink types with `specbond.dat` records: HLKNL, LKNL, deHHLNL, deHLNL,
+PYD, DPD, PYL, DPL, Glucosepane, Pentosidine, MOLD and DiTyrosineFromPhe.
+`specbond` mode is only available with `amber99`. To check a built topology,
+see [Validating a Topology](docs/validation.md).
 
 ### Example Workflows
 
@@ -390,6 +401,7 @@ For detailed API documentation, advanced usage examples, and theoretical backgro
 - [Configuration Reference](docs/configuration.md)
 - [Data Reference](docs/data.md)
 - [Data Dictionary](docs/data_dictionary.md)
+- [Validating a Topology](docs/validation.md)
 - [Example Gallery](docs/examples)
 
 ## 🤝 Contributing
