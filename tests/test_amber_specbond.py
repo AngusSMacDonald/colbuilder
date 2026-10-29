@@ -101,6 +101,7 @@ def test_specbond_mode_rejects_martini():
     with pytest.raises(Exception, match="only supported.*amber99"):
         ColbuilderConfig(
             species="homo_sapiens",
+            topology_generator=True,
             force_field="martini3",
             amber_topology_mode="specbond",
         )
@@ -184,7 +185,12 @@ def test_bond_verification_succeeds_and_missing_bond_fails(tmp_path):
         + "1.0 1.0 1.0\n"
     )
     itp = tmp_path / "component.itp"
-    itp.write_text("[ bonds ]\n1 2 1\n")
+    atoms = (
+        "[ atoms ]\n"
+        "1 CT 1 L4Y CE 1 0.0 12.01\n"
+        "2 N3 2 L5Y NZ 2 0.0 14.01\n"
+    )
+    itp.write_text(atoms + "[ bonds ]\n1 2 1\n")
     hit = _hit(
         _marker(0, "L4Y", "CE", 947, "A", (0.0, 0.0, 0.0)),
         _marker(1, "L5Y", "NZ", 9, "C", (1.81, 0.0, 0.0)),
@@ -192,6 +198,6 @@ def test_bond_verification_succeeds_and_missing_bond_fails(tmp_path):
     )
     assert verify_component_crosslinks(gro, itp, [hit]) == 1
 
-    itp.write_text("[ bonds ]\n")
+    itp.write_text(atoms + "[ bonds ]\n")
     with pytest.raises(RuntimeError, match="did not create expected crosslink bond"):
         verify_component_crosslinks(gro, itp, [hit])

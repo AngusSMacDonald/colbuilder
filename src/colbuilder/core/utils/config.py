@@ -743,7 +743,11 @@ class ColbuilderConfig(BaseModel):
                 "(supported: 'amber99' or 'martini3')",
                 error_code="CFG_ERR_006",
             )
-        if self.amber_topology_mode == "specbond" and self.force_field != "amber99":
+        if (
+            self.topology_generator
+            and self.amber_topology_mode == "specbond"
+            and self.force_field != "amber99"
+        ):
             raise ConfigurationError(
                 "amber_topology_mode 'specbond' is only supported with "
                 "force_field 'amber99'",

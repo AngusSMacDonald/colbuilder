@@ -30,8 +30,7 @@ LOG = setup_logger(__name__)
 
 FF = "amber99sb-star-ildnp"
 FF_DIR = f"{FF}.ff"
-GROUPING_CUTOFF_A = 5.0
-TOPOLOGY_CUTOFF_A = 5.0
+CROSSLINK_CUTOFF_A = 5.0
 
 SECTION_RE = re.compile(r"^\s*\[\s*([^\]]+?)\s*\]")
 INCLUDE_RE = re.compile(r'^(\s*#include\s+")([^"]+)(".*)$')
@@ -63,6 +62,8 @@ XLINK_ATOMS: Dict[str, Set[str]] = {
     "APD": {"NZ"},
     "LZD": {"CE"},
     "LZS": {"NZ1"},
+    "DTY": {"CE1"},
+    "DTF": {"CE1"},
 }
 
 TRIVALENT_RESIDUES = {
@@ -225,7 +226,7 @@ def _compatible_hits(markers: Sequence[Marker], amber: Amber) -> List[Hit]:
             ):
                 continue
             distance = _distance(first, second)
-            if distance < TOPOLOGY_CUTOFF_A:
+            if distance < CROSSLINK_CUTOFF_A:
                 hits.append({"a": first, "b": second, "distance_A": distance})
     return hits
 
@@ -258,7 +259,7 @@ def _validate_unambiguous(hits: Sequence[Hit]) -> None:
     if ambiguous:
         raise RuntimeError(
             "Ambiguous crosslink chemistry: reactive atom(s) have multiple partners "
-            f"within {TOPOLOGY_CUTOFF_A:g} A: {ambiguous}"
+            f"within {CROSSLINK_CUTOFF_A:g} A: {ambiguous}"
         )
 
 
@@ -352,6 +353,24 @@ def recognition_reference_clusters_nm(
     return clusters
 
 
+def _check_recognition_window(
+    reference_nm: float,
+    distances_nm: Sequence[float],
+    chemistry: Tuple[str, str, str, str],
+) -> None:
+    """Fail if a written reference no longer covers its cluster (GROMACS +/-10%)."""
+    outside = [
+        value for value in distances_nm
+        if not 0.9 * reference_nm <= value <= 1.1 * reference_nm
+    ]
+    if outside:
+        raise RuntimeError(
+            f"specbond reference {reference_nm:g} nm for "
+            f"{chemistry[0]}/{chemistry[1]} <-> {chemistry[2]}/{chemistry[3]} "
+            f"does not cover observed distance(s) {outside} nm"
+        )
+
+
 def write_component_specbond(
     base_specbond: Path,
     output: Path,
@@ -383,11 +402,13 @@ def write_component_specbond(
         template = list(records[insertion])
         for index in reversed(matching):
             del records[index]
-        for offset, (reference, _) in enumerate(
+        for offset, (reference, cluster) in enumerate(
             recognition_reference_clusters_nm(distances)
         ):
+            written = f"{reference:.6f}"
+            _check_recognition_window(float(written), cluster, chemistry)
             replacement = list(template)
-            replacement[6] = f"{reference:.4f}"
+            replacement[6] = written
             records.insert(insertion + offset, replacement)
 
     with output.open("w") as handle:
@@ -430,29 +451,12 @@ def build_sequential_components(
     _validate_unambiguous(hits)
     complete_pyd = _validate_complete_pyd(hits)
 
+    # Every expected bond joins its two collagens into one component, so each
+    # crosslink is always generated inside a single pdb2gmx run.
     union = UnionFind(len(collagens))
     for hit in hits:
-        if float(hit["distance_A"]) < GROUPING_CUTOFF_A:
-            union.union(int(hit["a"]["collagen"]), int(hit["b"]["collagen"]))
-    groups = union.groups()
-    component = {
-        collagen_id: group_index
-        for group_index, group in enumerate(groups)
-        for collagen_id in group
-    }
-    missing_components = [
-        hit for hit in hits
-        if component[int(hit["a"]["collagen"])]
-        != component[int(hit["b"]["collagen"])]
-    ]
-    if missing_components:
-        raise RuntimeError(
-            "Crosslink component is missing: compatible atom pair(s) within the "
-            f"{TOPOLOGY_CUTOFF_A:g} A topology cutoff were not connected by the "
-            f"{GROUPING_CUTOFF_A:g} A component cutoff: "
-            + "; ".join(_hit_description(hit) for hit in missing_components)
-        )
-    return groups, hits, complete_pyd
+        union.union(int(hit["a"]["collagen"]), int(hit["b"]["collagen"]))
+    return union.groups(), hits, complete_pyd
 
 
 def _write_component_pdb(
@@ -566,12 +570,13 @@ def _parse_gro_atoms(gro: Path) -> List[Marker]:
     lines = gro.read_text().splitlines()
     count = int(lines[1].strip())
     atoms: List[Marker] = []
-    for line in lines[2:2 + count]:
+    # The .gro atom number field wraps after 99999, so use the line position.
+    for index, line in enumerate(lines[2:2 + count], start=1):
         atoms.append(
             {
                 "resname": line[5:10].strip(),
                 "atom": line[10:15].strip(),
-                "index": int(line[15:20].strip()),
+                "index": index,
                 "xyz": (
                     float(line[20:28]) * 10.0,
                     float(line[28:36]) * 10.0,
@@ -622,12 +627,47 @@ def _parse_itp_bonds(itp: Path) -> Set[Tuple[int, int]]:
     return bonds
 
 
+def count_crosslink_bonds(itp: Path) -> int:
+    """Count inter-residue [ bonds ] that are not peptide or cap C-N bonds."""
+    residue_of: Dict[int, Tuple[int, str]] = {}
+    residue_index, last_key = 0, None
+    crosslinks = 0
+    section = None
+    with itp.open() as handle:
+        for raw in handle:
+            parsed = _section(raw)
+            if parsed is not None:
+                section = parsed
+                continue
+            fields = raw.split(";", 1)[0].split()
+            if not fields or raw.lstrip().startswith("#"):
+                continue
+            if section == "atoms" and len(fields) >= 5:
+                key = (fields[2], fields[3])
+                if key != last_key:
+                    residue_index += 1
+                    last_key = key
+                residue_of[int(fields[0])] = (residue_index, fields[4])
+            elif section == "bonds" and len(fields) >= 2:
+                first = residue_of[int(fields[0])]
+                second = residue_of[int(fields[1])]
+                if first[0] != second[0] and {first[1], second[1]} != {"C", "N"}:
+                    crosslinks += 1
+    return crosslinks
+
+
 def verify_component_crosslinks(
     gro: Path,
     itp: Path,
     component_hits: Sequence[Hit],
 ) -> int:
-    """Fail unless every expected crosslink is in pdb2gmx's [ bonds ]."""
+    """Fail unless pdb2gmx's [ bonds ] has exactly the expected crosslinks."""
+    found = count_crosslink_bonds(itp)
+    if found > len(component_hits):
+        raise RuntimeError(
+            f"pdb2gmx created {found} crosslink-like bonds in {itp.name}, "
+            f"but only {len(component_hits)} were expected"
+        )
     if not component_hits:
         return 0
     atoms = _parse_gro_atoms(gro)
