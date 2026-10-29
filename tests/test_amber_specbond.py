@@ -1,3 +1,4 @@
+import csv
 from pathlib import Path
 import sys
 import types
@@ -23,8 +24,12 @@ if "modeller" not in sys.modules:
     )
 
 from colbuilder.colbuilder import main
+from colbuilder.core.geometry.crosslink import Crosslink
+from colbuilder.core.topology.amber import Amber
 from colbuilder.core.topology.amber_specbond import (
+    XLINK_ATOMS,
     _validate_complete_pyd,
+    count_crosslink_bonds,
     read_specbond_records,
     verify_component_crosslinks,
     write_component_specbond,
@@ -201,3 +206,164 @@ def test_bond_verification_succeeds_and_missing_bond_fails(tmp_path):
     itp.write_text(atoms + "[ bonds ]\n")
     with pytest.raises(RuntimeError, match="did not create expected crosslink bond"):
         verify_component_crosslinks(gro, itp, [hit])
+
+
+def test_gro_atom_index_uses_line_position_past_99999(tmp_path):
+    count = 100002
+    gro = tmp_path / "component.gro"
+    gro.write_text(
+        "test\n"
+        f"{count}\n"
+        + "".join(
+            _gro_atom(i % 100000, "GLY", "CA", i % 100000, 9.0, 9.0, 9.0)
+            for i in range(1, count - 1)
+        )
+        + _gro_atom(100001 % 100000, "L4Y", "CE", 100001 % 100000, 0.0, 0.0, 0.0)
+        + _gro_atom(100002 % 100000, "L5Y", "NZ", 100002 % 100000, 0.181, 0.0, 0.0)
+        + "1.0 1.0 1.0\n"
+    )
+    itp = tmp_path / "component.itp"
+    atoms = "".join(
+        f"{i} CT {i} GLY CA {i} 0.0 12.01\n" for i in range(1, count - 1)
+    )
+    atoms += f"{count - 1} CT {count - 1} L4Y CE {count - 1} 0.0 12.01\n"
+    atoms += f"{count} N3 {count} L5Y NZ {count} 0.0 14.01\n"
+    itp.write_text("[ atoms ]\n" + atoms + "[ bonds ]\n100001 100002 1\n")
+    hit = _hit(
+        _marker(0, "L4Y", "CE", 947, "A", (0.0, 0.0, 0.0)),
+        _marker(1, "L5Y", "NZ", 9, "C", (1.81, 0.0, 0.0)),
+        1.81,
+    )
+    assert verify_component_crosslinks(gro, itp, [hit]) == 1
+
+
+def test_specbond_reference_covers_window_edges(tmp_path):
+    base = _base_specbond(tmp_path / "base.dat")
+    output = tmp_path / "component.dat"
+    aldehyde = _marker(0, "L4Y", "CE", 947, "A", (0.0, 0.0, 0.0))
+    amine_a = _marker(1, "L5Y", "NZ", 9, "C", (1.80, 0.0, 0.0))
+    amine_b = _marker(2, "L5Y", "NZ", 1047, "C", (1.80 * 1.1 / 0.9 * 0.99999, 0.0, 0.0))
+    distances = [1.80, 1.80 * 1.1 / 0.9 * 0.99999]
+    write_component_specbond(
+        base,
+        output,
+        [_hit(aldehyde, amine_a, distances[0]), _hit(aldehyde, amine_b, distances[1])],
+    )
+
+    references = _reference_lengths(output, ("L4Y", "CE", "L5Y", "NZ"))
+    assert references
+    for distance in distances:
+        assert any(0.9 * ref <= distance / 10.0 <= 1.1 * ref for ref in references)
+
+    records, _ = read_specbond_records(output)
+    matching = [
+        record for record in records
+        if (record[0], record[1], record[3], record[4]) == ("L4Y", "CE", "L5Y", "NZ")
+    ]
+    assert matching
+    assert all(len(record[6].split(".")[1]) == 6 for record in matching)
+
+
+def test_extra_crosslink_bond_fails_verification(tmp_path):
+    gro = tmp_path / "component.gro"
+    gro.write_text(
+        "test\n4\n"
+        + _gro_atom(1, "L4Y", "CE", 1, 0.000, 0.000, 0.000)
+        + _gro_atom(2, "L5Y", "NZ", 2, 0.181, 0.000, 0.000)
+        + _gro_atom(3, "L4Y", "CE", 3, 0.000, 1.000, 0.000)
+        + _gro_atom(4, "L5Y", "NZ", 4, 0.181, 1.000, 0.000)
+        + "1.0 1.0 1.0\n"
+    )
+    itp = tmp_path / "component.itp"
+    itp.write_text(
+        "[ atoms ]\n"
+        "1 CT 1 L4Y CE 1 0.0 12.01\n"
+        "2 N3 2 L5Y NZ 2 0.0 14.01\n"
+        "3 CT 3 L4Y CE 3 0.0 12.01\n"
+        "4 N3 4 L5Y NZ 4 0.0 14.01\n"
+        "[ bonds ]\n1 2 1\n3 4 1\n"
+    )
+    assert count_crosslink_bonds(itp) == 2
+    hit = _hit(
+        _marker(0, "L4Y", "CE", 947, "A", (0.0, 0.0, 0.0)),
+        _marker(1, "L5Y", "NZ", 9, "C", (1.81, 0.0, 0.0)),
+        1.81,
+    )
+    with pytest.raises(RuntimeError, match="crosslink-like bonds"):
+        verify_component_crosslinks(gro, itp, [hit])
+
+
+def test_peptide_bond_is_not_counted_as_crosslink(tmp_path):
+    itp = tmp_path / "peptide.itp"
+    itp.write_text(
+        "[ atoms ]\n"
+        "1 CT 1 GLY C 1 0.0 12.01\n"
+        "2 N3 2 ALA N 2 0.0 14.01\n"
+        "[ bonds ]\n1 2 1\n"
+    )
+    assert count_crosslink_bonds(itp) == 0
+
+
+def test_specbond_residues_from_crosslinks_csv_are_recognised():
+    csv_path = (
+        Path(__file__).parents[1] / "src/colbuilder/data/sequence/crosslinks.csv"
+    )
+    residues = set()
+    with csv_path.open(newline="") as handle:
+        for row in csv.DictReader(handle):
+            for column in ("R1", "R2", "R3"):
+                name = (row[column] or "").strip()
+                if name and name != "NONE":
+                    residues.add(name)
+    assert {"DTY", "DTF"} <= residues
+
+    bundled = (
+        Path(__file__).parents[1]
+        / "src/colbuilder/data/topology/amber99sb-star-ildnp.ff/specbond.dat"
+    )
+    records, _ = read_specbond_records(bundled)
+    checked = []
+    for record in records:
+        if record[0] not in residues or record[3] not in residues:
+            continue
+        checked.append(record)
+        assert record[1] in XLINK_ATOMS[record[0]]
+        assert record[4] in XLINK_ATOMS[record[3]]
+    assert len(checked) > 10
+    assert any({record[0], record[3]} == {"DTY", "DTF"} for record in checked)
+
+
+@pytest.mark.parametrize(
+    "first, second, expected",
+    [
+        ("L4Y", "L5Y", True),
+        ("L5Y", "L4Y", True),
+        ("L4X", "L5X", True),
+        ("LY4", "LY5", True),
+        ("LX4", "LX5", True),
+        ("LGX", "AGS", True),
+        ("LPS", "APD", True),
+        ("LZD", "LZS", True),
+        ("DTY", "DTF", True),
+        ("L4Y", "L5X", False),
+        ("L4X", "L5Y", False),
+        ("LY4", "L5Y", False),
+        ("LGX", "APD", False),
+        ("LPS", "AGS", False),
+        ("L4Y", "L4Y", False),
+    ],
+)
+def test_divalent_crosslinks_bond_only_matched_partners(first, second, expected):
+    amber = Amber()
+    first_link = Crosslink("1", first, "A", [0.0, 0.0, 0.0], "D", 0, "CE")
+    second_link = Crosslink("1", second, "B", [1.8, 0.0, 0.0], "D", 1, "NZ")
+    assert amber._are_compatible_crosslinks(first_link, second_link) is expected
+
+
+def test_specbond_martini_allowed_without_topology():
+    config = ColbuilderConfig(
+        species="homo_sapiens",
+        force_field="martini3",
+        amber_topology_mode="specbond",
+    )
+    assert config.amber_topology_mode == "specbond"
