@@ -1,6 +1,12 @@
-14
+20
 LY2     CB      1       LYX     C12     1       0.152     LY2     LYX
 LY3     CG      1       LYX     C13     1       0.152     LY3     LYX
+LX2     CB      1       LXX     C12     1       0.152     LX2     LXX
+LX3     CG      1       LXX     C13     1       0.152     LX3     LXX
+L2Y     CG      1       LXY     C12     1       0.152     L2Y     LXY
+L3Y     CG      1       LXY     C13     1       0.152     L3Y     LXY
+L2X     CG      1       LYY     C12     1       0.152     L2X     LYY
+L3X     CG      1       LYY     C13     1       0.152     L3X     LYY
 LY4     CE      1       LY5      NZ     1       0.152     LY4     LY5
 L4Y     CE      1       L5Y      NZ     1       0.152     L4Y     L5Y
 LX4     CE      1       LX5      NZ     1       0.152     LX4     LX5

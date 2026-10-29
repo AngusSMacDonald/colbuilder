@@ -24,6 +24,7 @@ if "modeller" not in sys.modules:
 
 from colbuilder.colbuilder import main
 from colbuilder.core.topology.amber_specbond import (
+    _validate_complete_pyd,
     read_specbond_records,
     verify_component_crosslinks,
     write_component_specbond,
@@ -141,6 +142,30 @@ def test_pyd_recognition_windows_cover_both_arms(tmp_path):
     assert len(c12_refs) == len(c13_refs) == 1
     assert 0.9 * c12_refs[0] <= 0.235 <= 1.1 * c12_refs[0]
     assert 0.9 * c13_refs[0] <= 0.175 <= 1.1 * c13_refs[0]
+
+
+@pytest.mark.parametrize(
+    "central, arm12, atom12, arm13",
+    [("LYX", "LY2", "CB", "LY3"), ("LXX", "LX2", "CB", "LX3"),
+     ("LXY", "L2Y", "CG", "L3Y"), ("LYY", "L2X", "CG", "L3X")],
+)
+def test_trivalent_centres_are_bundled_and_validated(central, arm12, atom12, arm13):
+    bundled = (
+        Path(__file__).parents[1]
+        / "src/colbuilder/data/topology/amber99sb-star-ildnp.ff/specbond.dat"
+    )
+    records, _ = read_specbond_records(bundled)
+    chemistries = {(r[0], r[1], r[3], r[4]) for r in records}
+    assert (arm12, atom12, central, "C12") in chemistries
+    assert (arm13, "CG", central, "C13") in chemistries
+
+    c12 = _marker(0, central, "C12", 947, "A", (0.0, 0.0, 0.0))
+    c13 = _marker(0, central, "C13", 947, "A", (0.0, 1.0, 0.0))
+    first = _marker(1, arm12, atom12, 9, "C", (2.5, 0.0, 0.0))
+    second = _marker(2, arm13, "CG", 5, "B", (2.5, 1.0, 0.0))
+    assert _validate_complete_pyd([_hit(c12, first, 2.5), _hit(c13, second, 2.5)]) == 1
+    with pytest.raises(RuntimeError, match="Incomplete trivalent"):
+        _validate_complete_pyd([_hit(c12, first, 2.5)])
 
 
 def _gro_atom(resid, resname, atom, index, x, y, z):

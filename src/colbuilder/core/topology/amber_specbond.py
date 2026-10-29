@@ -266,10 +266,10 @@ def _pyd_arm(hit: Hit) -> Optional[str]:
     for central, arm in ((hit["a"], hit["b"]), (hit["b"], hit["a"])):
         if central["resname"] not in CENTRAL_RESIDUES:
             continue
-        if central["atom"] == "C13" and arm["atom"] == "CG":
-            return "C13-CG"
-        if central["atom"] == "C12" and arm["atom"] == "CB":
-            return "C12-CB"
+        # The arm residue for each ring carbon is checked by
+        # Amber._are_compatible_crosslinks; PYL/DPL bond C12 via CG, not CB.
+        if central["atom"] in ("C13", "C12"):
+            return str(central["atom"])
     return None
 
 
@@ -288,12 +288,12 @@ def _validate_complete_pyd(hits: Sequence[Hit]) -> int:
         )
         centres.setdefault(identity, set()).add(arm)
     incomplete = {
-        identity: sorted({"C13-CG", "C12-CB"} - arms)
+        identity: sorted({"C13", "C12"} - arms)
         for identity, arms in centres.items()
-        if arms != {"C13-CG", "C12-CB"}
+        if arms != {"C13", "C12"}
     }
     if incomplete:
-        raise RuntimeError(f"Incomplete PYD centre(s); missing chemistry: {incomplete}")
+        raise RuntimeError(f"Incomplete trivalent centre(s); missing ring bond: {incomplete}")
     return len(centres)
 
 
@@ -798,7 +798,7 @@ async def build_amber99_specbond(
         amber.complete_pyd_centres = complete_pyd
         LOG.info(
             f"Specbond topology complete: {verified_total} verified crosslink bonds; "
-            f"{complete_pyd} complete PYD centres"
+            f"{complete_pyd} complete trivalent centres"
         )
         if not config.topology_debug:
             shutil.rmtree(workroot)
