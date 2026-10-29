@@ -239,23 +239,20 @@ class Amber:
         Returns:
             True if crosslinks can form a bond
         """
-        # Divalent crosslinks (D-type)
-        divalent_aldehyde = {'L4Y', 'L4X', 'LY4', 'LX4', 'LGX', 'LPS', 'LZD'}
-        divalent_amine = {'L5Y', 'L5X', 'LY5', 'LX5', 'AGS', 'APD', 'LZS'}
-
-        # Asymmetric divalent crosslinks that aren't aldehyde/amine
-        # condensation chemistry -- two complementary categories, one code
-        # added to each side per new pair. DTY/DTF: a di-tyrosine-style
-        # direct CE1-CE1 bond where DTF is a Phe position mutated into a
-        # Tyr-like residue as part of the same patch that forms the bond
-        # (DTY/DTF's REPLACEMENT_MAP/RESIDUE_TO_MUTATION target their real
-        # original parents, TYR and PHE respectively -- see
-        # geometry_replacer.py/unpaired_crosslinks.py).
-        divalent_asymmetric_a = {'DTY'}
-        divalent_asymmetric_b = {'DTF'}
-        if cl1.resname in divalent_asymmetric_a and cl2.resname in divalent_asymmetric_b:
+        # Divalent crosslinks (D-type): each aldehyde bonds only its own
+        # amine partner, matching the records in specbond.dat and the pairing
+        # used by the geometry stage (unpaired_crosslinks.CROSSLINK_PARTNERS).
+        # Mixed pairs such as L4Y-L5X are not bonded. DTY/DTF: a
+        # di-tyrosine-style direct CE1-CE1 bond where DTF is a Phe position
+        # mutated into a Tyr-like residue as part of the same patch that
+        # forms the bond.
+        divalent_partners = {
+            'L4Y': 'L5Y', 'L4X': 'L5X', 'LY4': 'LY5', 'LX4': 'LX5',
+            'LGX': 'AGS', 'LPS': 'APD', 'LZD': 'LZS', 'DTY': 'DTF',
+        }
+        if divalent_partners.get(cl1.resname) == cl2.resname:
             return True
-        if cl1.resname in divalent_asymmetric_b and cl2.resname in divalent_asymmetric_a:
+        if divalent_partners.get(cl2.resname) == cl1.resname:
             return True
 
         # Trivalent crosslinks (T-type). Each aldehyde (ring) residue bonds two
@@ -267,12 +264,6 @@ class Amber:
             "LXY": {"C13": "L3Y", "C12": "L2Y"},  # PYL
             "LYY": {"C13": "L3X", "C12": "L2X"},  # DPL
         }
-
-        # Divalent pairs: aldehyde + amine
-        if cl1.resname in divalent_aldehyde and cl2.resname in divalent_amine:
-            return True
-        if cl1.resname in divalent_amine and cl2.resname in divalent_aldehyde:
-            return True
 
         # Trivalent pairs: the aldehyde ring carbon must bond its designated arm.
         def _trivalent_ok(aldehyde: Crosslink, amine: Crosslink) -> bool:
@@ -639,7 +630,6 @@ class Amber:
         def canon4(t: Tuple[int, int, int, int]) -> Tuple[int, int, int, int]:
             return t if t[0] <= t[3] else (t[3], t[2], t[1], t[0])
 
-        atom_name: Dict[int, str] = {}
         bonds: List[Tuple[int, int]] = []
         have_angles: Set[Tuple[int, int, int]] = set()
         have_diheds: Set[Tuple[int, int, int, int]] = set()
@@ -655,9 +645,7 @@ class Amber:
                 continue
             p = s.split()
             try:
-                if section == 'atoms' and len(p) >= 5:
-                    atom_name[int(p[0])] = p[4]
-                elif section == 'bonds' and len(p) >= 2:
+                if section == 'bonds' and len(p) >= 2:
                     bonds.append((int(p[0]), int(p[1])))
                 elif section == 'angles' and len(p) >= 3:
                     have_angles.add(canon3((int(p[0]), int(p[1]), int(p[2]))))
@@ -673,9 +661,6 @@ class Amber:
         for a, b in bonds:
             adj.setdefault(a, set()).add(b)
             adj.setdefault(b, set()).add(a)
-
-        def is_H(i: int) -> bool:
-            return atom_name.get(i, '').startswith('H')
 
         def graph_dist(u: int, v: int, cap: int = 3):
             if u == v:
@@ -730,10 +715,10 @@ class Amber:
 
         # 1-4 pairs = the two end atoms of each dihedral, when their shortest
         # graph distance is exactly 3 (a genuine 1-4, not a 1-2/1-3 via a shorter
-        # route) and they are not both hydrogens.
+        # route). H-H pairs are kept, as pdb2gmx (gen-pairs yes) generates them.
         pairs: Set[Tuple[int, int]] = set()
         for (i, j, k, l) in dihedrals:
-            if i == l or (is_H(i) and is_H(l)):
+            if i == l:
                 continue
             if graph_dist(i, l) == 3:
                 pairs.add(canon2(i, l))
